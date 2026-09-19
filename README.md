@@ -55,3 +55,12 @@ js/scenery.js   paper, mountains, decorations, seasons
 js/world.js     procedural chunks, pickups, hooks, the tide
 js/game.js      loop, input, HUD, particles, states
 ```
+
+---
+
+## Also in this repository: Perigee (3D gravity golf)
+
+[`perigee/`](perigee/) holds **Perigee**, a 3D gravity golf game built on Three.js.
+Putt a ball across star systems, slingshot round gas giants, tee off from a moving
+moon and sink it into a wormhole. Serve the repository root and open
+`/perigee/`, or see [`perigee/README.md`](perigee/README.md).
