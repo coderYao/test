@@ -1,0 +1,74 @@
+:root {
+  --bg: #05060f;
+  --fg: #eef2ff;
+  --dim: rgba(238, 242, 255, 0.55);
+  --accent: #6ef3ff;
+  --accent2: #ff6fd8;
+  --panel: rgba(10, 12, 28, 0.72);
+  --stroke: rgba(150, 180, 255, 0.22);
+  --font: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font-family: var(--font); overflow: hidden; -webkit-user-select: none; user-select: none; }
+canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.hidden { display: none !important; }
+
+#hud { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: max(14px, env(safe-area-inset-top)) 16px max(14px, env(safe-area-inset-bottom)); }
+#hud .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+#hud .hole .k { font-family: var(--mono); font-size: 12px; letter-spacing: 0.18em; color: var(--accent); }
+#hud .hole .v { font-size: 22px; font-weight: 700; letter-spacing: 0.01em; text-shadow: 0 2px 18px rgba(0,0,0,0.6); }
+#hud .stats { display: flex; gap: 18px; background: var(--panel); border: 1px solid var(--stroke); border-radius: 12px; padding: 8px 14px; backdrop-filter: blur(10px); }
+#hud .stats div { display: flex; flex-direction: column; align-items: center; min-width: 56px; }
+#hud .stats .k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; color: var(--dim); }
+#hud .stats b { font-size: 20px; font-weight: 700; }
+#hud .bottom { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+#hint { font-size: 14px; color: var(--dim); text-align: center; max-width: 560px; text-shadow: 0 1px 8px rgba(0,0,0,0.8); transition: opacity 0.4s; }
+.power { width: min(360px, 60vw); height: 6px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; opacity: 0; transition: opacity 0.2s; }
+.power.on { opacity: 1; }
+#powerFill { height: 100%; width: 0; background: linear-gradient(90deg, #52ff9a, #ffe45c 55%, #ff5c7a); border-radius: 3px; }
+.btns { display: flex; gap: 8px; pointer-events: auto; }
+button { font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--fg); background: var(--panel); border: 1px solid var(--stroke); border-radius: 10px; padding: 8px 14px; cursor: pointer; backdrop-filter: blur(10px); transition: transform 0.08s, background 0.15s, border-color 0.15s; letter-spacing: 0.02em; }
+button:hover { background: rgba(40, 50, 90, 0.8); border-color: rgba(150,180,255,0.5); }
+button:active { transform: scale(0.97); }
+button.off { opacity: 0.5; text-decoration: line-through; }
+
+#msg { position: absolute; left: 0; right: 0; top: 24%; text-align: center; font-size: 30px; font-weight: 700; letter-spacing: 0.04em; opacity: 0; transform: translateY(8px); transition: opacity 0.25s, transform 0.25s; text-shadow: 0 4px 30px rgba(0,0,0,0.8), 0 0 24px rgba(110, 243, 255, 0.35); pointer-events: none; }
+#msg.show { opacity: 1; transform: translateY(0); }
+#msg small { display: block; font-size: 14px; font-weight: 500; color: var(--dim); margin-top: 4px; letter-spacing: 0.1em; }
+
+.overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: radial-gradient(ellipse at center, rgba(5,6,15,0.35), rgba(5,6,15,0.85)); animation: fade 0.5s ease; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.panel { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--stroke); border-radius: 22px; padding: 34px 36px; backdrop-filter: blur(18px); box-shadow: 0 30px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06); text-align: center; }
+.panel.small { width: min(420px, 100%); }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.28em; color: var(--accent); }
+h1 { margin: 6px 0 4px; font-size: clamp(56px, 12vw, 92px); letter-spacing: 0.12em; font-weight: 700; line-height: 1; background: linear-gradient(180deg, #fff, #9fd6ff 60%, #6ef3ff); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0 22px rgba(110,243,255,0.35)); }
+h2 { margin: 6px 0 4px; font-size: clamp(34px, 8vw, 54px); letter-spacing: 0.08em; font-weight: 700; line-height: 1.05; }
+.tag { color: var(--dim); font-size: 15px; line-height: 1.5; margin: 6px auto 22px; max-width: 420px; }
+.menu { display: flex; flex-direction: column; gap: 10px; margin: 0 auto 20px; max-width: 360px; }
+.menu.row { flex-direction: row; justify-content: center; }
+.menu button { font-size: 16px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.menu button span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--dim); }
+.menu.row button { justify-content: center; }
+button.primary { background: linear-gradient(135deg, rgba(110,243,255,0.25), rgba(255,111,216,0.22)); border-color: rgba(110,243,255,0.55); }
+button.primary:hover { background: linear-gradient(135deg, rgba(110,243,255,0.4), rgba(255,111,216,0.35)); }
+.controls { color: var(--dim); font-size: 13px; line-height: 1.7; }
+.controls b { color: var(--fg); font-weight: 600; }
+.best { margin-top: 14px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--accent2); min-height: 16px; }
+#resultLine { color: var(--dim); margin: 4px 0 18px; }
+#scoreTable { width: 100%; border-collapse: collapse; margin: 16px 0 8px; font-family: var(--mono); font-size: 13px; }
+#scoreTable td, #scoreTable th { padding: 6px 4px; border-bottom: 1px solid var(--stroke); text-align: center; }
+#scoreTable th { color: var(--dim); font-weight: 500; letter-spacing: 0.1em; font-size: 10px; }
+#scoreTable td.name { text-align: left; font-family: var(--font); }
+#scoreTable td.under { color: #6effa8; }
+#scoreTable td.over { color: #ff7f9a; }
+#scoreBest { color: var(--dim); font-size: 13px; margin-bottom: 16px; }
+@media (max-width: 640px) {
+  .panel { padding: 26px 20px; }
+  #hud .hole .v { font-size: 17px; }
+  #hud .stats { gap: 10px; padding: 6px 10px; }
+  #hud .stats b { font-size: 17px; }
+  #hint { font-size: 12px; }
+  .controls { display: none; }
+  #msg { font-size: 22px; }
+}
