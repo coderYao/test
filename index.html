@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>墨鲤 · Ink Koi</title>
+<meta name="description" content="A 2D ink-wash (水墨) game: paint currents with a brush, and a koi rides your ink through an endless scroll of mountains, mist and seasons.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="title" class="overlay">
+  <div class="panel">
+    <div class="seal">墨</div>
+    <h1>墨鲤</h1>
+    <h2>Ink Koi</h2>
+    <p class="lead">笔落成流，鲤随墨行。<br><span class="en">Where the brush falls, water flows; the koi follows the ink.</span></p>
+    <ul class="how">
+      <li><b>拖动</b> 画一笔，锦鲤会顺着你的墨迹游动。<span class="en">Drag to paint a stroke; the koi rides it like a current.</span></li>
+      <li><b>慢笔浓墨</b>，粗而耐久；<b>疾笔飞白</b>，细而省墨。<span class="en">Slow strokes are thick and last; fast strokes are thin, dry, and cheap.</span></li>
+      <li><b>墨会干</b>，砚台慢慢回墨；拾取墨珠补墨。<span class="en">Ink runs out and slowly refills; pearls top it up.</span></li>
+      <li><b>浓墨伤鱼</b>：按住 <kbd>Shift</kbd>、右键拖动，或点「水」，以清水化开。<span class="en">Thick ink hurts the koi: hold Shift, right-drag, or tap 水 to wash it away.</span></li>
+      <li>躲开渔翁的钩，别被身后的墨潮追上。<span class="en">Dodge the fisherman's hooks, and outrun the ink tide.</span></li>
+    </ul>
+    <p class="cta">点击任意处开始 · Click anywhere to begin</p>
+  </div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <div class="panel">
+    <h1 class="small" id="over-reason">鱼化墨</h1>
+    <p class="en" id="over-reason-en"></p>
+    <div class="score"><span id="over-score">0</span></div>
+    <p class="stats">行 <b id="over-dist">0</b> 丈 · 墨珠 <b id="over-pearls">0</b> · 莲 <b id="over-lotus">0</b> · 最远 <b id="over-best">0</b></p>
+    <button id="btn-again">再游一次 · Again</button>
+  </div>
+</div>
+
+<div id="controls">
+  <button id="btn-water" title="水 / 墨 (Shift)">水</button>
+  <button id="btn-mute" title="mute (M)">音</button>
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/inkfield.js"></script>
+<script src="js/brush.js"></script>
+<script src="js/koi.js"></script>
+<script src="js/scenery.js"></script>
+<script src="js/world.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
