@@ -29,3 +29,7 @@ button:hover { background: #1e1e28; color: #f1eadb; }
   .panel { padding: 22px 20px; max-width: 92vw; max-height: 88vh; overflow: auto; }
   h1 { font-size: 60px; } .how { font-size: 13px; } .how .en { display: none; } .lead .en { display: none; }
 }
+
+#rotate { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(236,228,210,0.92); align-items: center; justify-content: center; text-align: center; font-size: 20px; line-height: 1.7; }
+#rotate .big { font-family: "Ma Shan Zheng", serif; font-size: 72px; display: inline-block; transform: rotate(90deg); margin-bottom: 10px; }
+@media (orientation: portrait) and (max-width: 700px) { #rotate { display: flex; } }

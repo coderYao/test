@@ -113,7 +113,7 @@ class Game {
       }
       this.pointer.x = p.x; this.pointer.y = p.y; this.pointer.ts = e.timeStamp;
     });
-    const up = e => { this.pointer.down = false; if (this.cur) this.endStroke(); };
+    const up = e => { this.pointer.down = false; this.pointer.button = 0; if (this.cur) this.endStroke(); };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
     cv.addEventListener('pointerleave', () => { this.pointer.inside = false; });
     window.addEventListener('keydown', e => {
