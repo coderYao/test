@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Perigee — Gravity Golf</title>
+  <meta name="description" content="Perigee: a 3D gravity golf game. Putt a ball across star systems, slingshot round gas giants, ride moons and sink it into a wormhole.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+  { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="top">
+      <div class="hole">
+        <div class="k" id="holeNum">HOLE 1</div>
+        <div class="v" id="holeName">First Light</div>
+      </div>
+      <div class="stats">
+        <div><span class="k">PAR</span><b id="par">2</b></div>
+        <div><span class="k">STROKES</span><b id="strokes">0</b></div>
+        <div><span class="k">TOTAL</span><b id="total">E</b></div>
+      </div>
+    </div>
+    <div id="msg"></div>
+    <div class="bottom">
+      <div id="hint"></div>
+      <div class="power"><div id="powerFill"></div></div>
+      <div class="btns">
+        <button id="btnRecall" title="Recall a drifting ball (Space)">Recall</button>
+        <button id="btnRestart" title="Restart this hole (R)">Restart</button>
+        <button id="btnView" title="Toggle overview (Tab)">Overview</button>
+        <button id="btnMute" title="Toggle sound (M)">Sound</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="title" class="overlay">
+    <div class="panel">
+      <div class="eyebrow">A GRAVITY GOLF GAME</div>
+      <h1>PERIGEE</h1>
+      <p class="tag">Putt across star systems. Slingshot round gas giants, tee off from a moving moon, and sink it into the wormhole.</p>
+      <div class="menu">
+        <button class="primary" id="btnPlay">Play the course <span>9 holes</span></button>
+        <button id="btnDaily">Daily sector <span id="dailyLabel"></span></button>
+        <button id="btnRandom">Random sector <span>new every time</span></button>
+      </div>
+      <div class="controls">
+        <div><b>Drag &amp; release</b> anywhere to putt (pull back like a slingshot)</div>
+        <div><b>Right-drag / two fingers</b> orbit the camera · <b>Wheel / pinch</b> zoom</div>
+        <div><b>Tab</b> overview · <b>R</b> restart hole · <b>Space</b> recall · <b>M</b> sound</div>
+      </div>
+      <div class="best" id="bestLabel"></div>
+    </div>
+  </div>
+
+  <div id="result" class="overlay hidden">
+    <div class="panel small">
+      <div class="eyebrow" id="resultHole">HOLE 1</div>
+      <h2 id="resultTitle">BIRDIE</h2>
+      <p id="resultLine">2 strokes · par 3</p>
+      <button class="primary" id="btnNext">Next hole</button>
+    </div>
+  </div>
+
+  <div id="scorecard" class="overlay hidden">
+    <div class="panel">
+      <div class="eyebrow">ROUND COMPLETE</div>
+      <h2 id="scoreTitle">EVEN PAR</h2>
+      <table id="scoreTable"></table>
+      <p id="scoreBest"></p>
+      <div class="menu row">
+        <button class="primary" id="btnAgain">Play again</button>
+        <button id="btnMenu">Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
