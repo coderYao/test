@@ -8,14 +8,15 @@ Built with Three.js only (vendored, no build step).
 
 ## Play
 
-Any static file server works. For example:
+Any static file server works. From this folder:
 
 ```
 python3 -m http.server 8000
 ```
 
-then open <http://localhost:8000/>. Opening `index.html` directly from disk does
-not work because ES modules need HTTP.
+then open <http://localhost:8000/>. From the repository root, open
+<http://localhost:8000/perigee/> instead. Opening `index.html` directly from
+disk does not work because ES modules need HTTP.
 
 Deep links: `?hole=5` jumps to hole 5 of the course; `?hole=1&mode=daily` starts
 today's sector.
@@ -48,4 +49,4 @@ today's sector.
 node tools/validate.mjs   # checks every hole has a hole-in-one line and good second shots
 ```
 
-See `DESIGN.md` for the brainstorm, research, and the reasons behind the design.
+See `DESIGN.md` in this folder for the brainstorm, research, and the reasons behind the design.

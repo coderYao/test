@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 22
       - name: Validate holes
-        run: node tools/validate.mjs
+        run: node perigee/tools/validate.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
