@@ -125,6 +125,7 @@ function finishHole() {
   $('resultTitle').textContent = name;
   $('resultLine').textContent = `${game.strokes} stroke${game.strokes === 1 ? '' : 's'} · par ${game.level.par} · round ${fmtRel(totalRel())}`;
   $('btnNext').textContent = game.holeIndex + 1 < game.course.length ? 'Next hole' : 'Scorecard';
+  ui.msg.classList.remove('show');
   ui.result.classList.remove('hidden');
   updateHud();
 }
@@ -217,6 +218,8 @@ function handleEvent(e) {
       world.emit(e.x, 0, e.z, 160, 0x6ef3ff, 12, { life: 1.4, size: 1.6, up: 6 });
       world.emit(e.x, 0, e.z, 80, 0xffffff, 6, { life: 1.0, size: 1.2, up: 10 });
       world.ball.visible = false;
+      world.trail.length = 0;
+      s.ball.vx = 0; s.ball.vz = 0;
       game.phase = 'holed';
       game.resultTimer = 1.3;
       flash(scoreName(game.strokes, game.level.par), `${game.strokes} STROKE${game.strokes === 1 ? '' : 'S'}`, 2400);

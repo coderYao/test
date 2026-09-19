@@ -547,7 +547,7 @@ export class World {
         if (this.trail.length > this.trailN) this.trail.shift();
       }
     } else if (this.trail.length) {
-      this.trail.shift(); if (this.trail.length) this.trail.shift();
+      for (let k = 0; k < 4 && this.trail.length; k++) this.trail.shift();
     }
     this._rebuildTrail(sp);
   }
