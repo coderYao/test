@@ -43,9 +43,11 @@ class Koi {
     const dir = this.forwardDir(stroke, s);
     const p = stroke.pointAt(s);
     // the koi never rides a current backwards: it turns into it, keeping part of its speed
-    const along = (this.vx * p.tx + this.vy * p.ty) * dir;
+    // ...but less of it the more squarely it was heading the other way, so a fall never bounces back up a slope
+    const spd = this.speed(), along = (this.vx * p.tx + this.vy * p.ty) * dir;
+    const turned = spd * KOI.TURN_KEEP * clamp(1 + along / (spd || 1), 0, 1);
     this.rail = stroke; this.s = s; this.dir = dir;
-    this.sp = dir * Math.max(KOI.MIN_RIDE, along, this.speed() * KOI.TURN_KEEP);
+    this.sp = dir * Math.max(KOI.MIN_RIDE, along, turned);
     this.sinceAttach = 0;
   }
 
@@ -63,19 +65,24 @@ class Koi {
     else { this.vx = Math.min(KOI.MAXSPEED, this.vx + amount); this.vy = Math.min(this.vy, this.vy * 0.4); }
   }
 
-  // fresh ink painted across a riding koi takes over: this is how the player redirects it
-  findNewerRail(strokes) {
+  // nearest rideable stroke within reach, or null. A stroke the koi just left is off limits until its cooldown ends.
+  findRail(strokes, accept) {
     let best = null, bs = 0, bd = 1e9;
     for (const st of strokes) {
-      if (st.id <= this.rail.id || st.dead || st.alpha < 0.3 || st.pts.length < 2) continue;
+      if (st.dead || st.alpha < 0.3 || st.pts.length < 2) continue;
+      if (st === this.lastRail && this.time - this.detachT < this.cooldown) continue;
       const s = st.nearest(this.x, this.y, KOI.ATTACH_R);
-      if (s < 0) continue;
-      const room = this.forwardDir(st, s) > 0 ? st.len - s : s;
-      if (room < KOI.SWITCH_ROOM) continue;
+      if (s < 0 || (accept && !accept(st, s))) continue;
       const p = st.pointAt(s); const d = dist(p.x, p.y, this.x, this.y);
       if (d < bd) { bd = d; best = st; bs = s; }
     }
     return best ? { stroke: best, s: bs } : null;
+  }
+
+  // fresh ink painted across a riding koi takes over: this is how the player redirects it
+  findNewerRail(strokes) {
+    const rail = this.rail;
+    return this.findRail(strokes, (st, s) => st.id > rail.id && (this.forwardDir(st, s) > 0 ? st.len - s : s) >= KOI.SWITCH_ROOM);
   }
 
   update(dt, strokes, field, events) {
@@ -124,18 +131,10 @@ class Koi {
       this.x += this.vx * dt; this.y += this.vy * dt;
       if (this.y < 14) { this.y = 14; if (this.vy < 0) this.vy = 0; }
       // look for a current to ride
-      let best = null, bs = 0, bd = 1e9;
-      for (const st of strokes) {
-        if (st.dead || st.alpha < 0.3) continue;
-        if (st === this.lastRail && this.time - this.detachT < this.cooldown) continue;
-        const s = st.nearest(this.x, this.y, KOI.ATTACH_R);
-        if (s < 0) continue;
-        const p = st.pointAt(s); const d = dist(p.x, p.y, this.x, this.y);
-        if (d < bd) { bd = d; best = st; bs = s; }
-      }
-      if (best) {
+      const found = this.findRail(strokes);
+      if (found) {
         const impact = this.speed();
-        this.attachTo(best, bs);
+        this.attachTo(found.stroke, found.s);
         if (events) events.attach(this.x, this.y, impact);
       }
     }

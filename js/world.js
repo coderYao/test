@@ -87,14 +87,12 @@ class World {
   }
 
   // the tide ebbs by `dist`, rests for `hold` seconds, then creeps back to the edge of the scroll
-  ebbTide(dist, hold) {
-    this.tidePush += dist; this.tideSlack = Math.max(this.tideSlack, dist); this.tideHold = hold;
+  ebbTide(d, hold) {
+    this.tideSlack = Math.min(this.tideSlack + d, d * 2);
+    this.tidePush = Math.min(this.tidePush + d, this.tideSlack);
+    this.tideHold = hold;
   }
 
-  // ink clouds the lotus has purified never reach the paper
-  clearClouds(x, y, r) {
-    for (const c of this.clouds) if (!c.deposited && dist(c.x, c.y, x, y) < r) c.deposited = true;
-  }
 
   hookTip(h, time) {
     const sx = Math.sin(time * 0.9 + h.phase) * h.sway;

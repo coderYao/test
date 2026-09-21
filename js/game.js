@@ -234,6 +234,11 @@ class Game {
     this.world.ensure(this.camX, this.camX + W + 900);
     this.world.depositClouds(this.field);
     this.world.prune(this.camX - 600);
+    for (const pf of this.purifies) {
+      pf.t += dt;
+      this.field.wash(pf.x, pf.y, PICKUP.PURIFY_R * easeOut(pf.t / PICKUP.PURIFY_T), 1 - Math.pow(0.7, dt * 60));
+    }
+    this.purifies = this.purifies.filter(pf => pf.t < PICKUP.PURIFY_T + 0.5);
     this.field.step(dt);
     if (this.state === 'play') {
       const events = {
@@ -271,7 +276,6 @@ class Game {
           Audio.chord(5, 0.4);
           // 出淤泥而不染: clear water spreads from the lotus, and the ink tide ebbs
           this.purifies.push({ x: l.x, y: l.y, t: 0 });
-          this.world.clearClouds(l.x, l.y, PICKUP.PURIFY_R);
           this.world.ebbTide(PICKUP.EBB, PICKUP.EBB_HOLD);
           this.floaters.push({ x: l.x, y: l.y + 30, text: '潮退', life: 1.6, col: 'rgba(70,96,120,' });
           this.burst(l.x, l.y, 'rgba(212,82,96,', 14); this.ripples.push({ x: l.x, y: l.y, r: 6, life: 0.8 });
@@ -279,11 +283,6 @@ class Game {
         }
       }
       this.comboT -= dt; if (this.comboT <= 0) this.combo = 0;
-      for (const pf of this.purifies) {
-        pf.t += dt;
-        this.field.wash(pf.x, pf.y, PICKUP.PURIFY_R * easeOut(pf.t / PICKUP.PURIFY_T), 0.3);
-      }
-      this.purifies = this.purifies.filter(pf => pf.t < PICKUP.PURIFY_T + 0.5);
       // hooks
       for (const h of this.world.hooks) {
         h.cool = Math.max(0, (h.cool || 0) - dt);
