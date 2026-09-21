@@ -79,11 +79,13 @@ function compose(seed) {
 function title(ctx, w, h) {
   const FONT_BRUSH = '"Ma Shan Zheng", "KaiTi", "STKaiti", serif';
   const u = Math.min(w, h * 1.45) / 1920;           // type scale
-  const portrait = h > w, x = w * (portrait ? 0.5 : 0.085), y = h * (portrait ? 0.215 : 0.30);
+  // Top centre in every format. Portals pin their own badges (New, Hot, Top rated...) to the top-left
+  // corner of a thumbnail, so a title there gets covered.
+  const x = w * 0.5, y = h * (h > w ? 0.215 : h === w ? 0.27 : 0.285);
   ctx.save();
-  ctx.textAlign = portrait ? 'center' : 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   // a breath of bare paper behind the title so it reads over the mountains
-  const r = 560 * u, gx = portrait ? x : x + 300 * u, gy = y - 60 * u;
+  const r = 560 * u, gx = x, gy = y - 60 * u;
   const halo = ctx.createRadialGradient(gx, gy, r * 0.1, gx, gy, r);
   halo.addColorStop(0, 'rgba(240,233,217,0.85)'); halo.addColorStop(1, 'rgba(240,233,217,0)');
   ctx.fillStyle = halo; ctx.fillRect(gx - r, gy - r, r * 2, r * 2);
@@ -92,9 +94,9 @@ function title(ctx, w, h) {
   const zh = '墨鲤', zw = ctx.measureText(zh).width;
   ctx.fillText(zh, x, y);
   ctx.font = `${118 * u}px ${FONT_BRUSH}`;
-  ctx.fillText('Ink Koi', portrait ? x : x + 8 * u, y + 150 * u);
+  ctx.fillText('Ink Koi', x, y + 150 * u);
   // the red seal, tucked against the last character
-  const sx = (portrait ? x + zw / 2 : x + zw) + 26 * u, sy = y - 250 * u, ss = 92 * u;
+  const sx = x + zw / 2 + 26 * u, sy = y - 250 * u, ss = 92 * u;
   ctx.translate(sx + ss / 2, sy + ss / 2); ctx.rotate(-0.07);
   ctx.fillStyle = 'rgba(184,50,40,0.94)';
   ctx.beginPath(); ctx.roundRect(-ss / 2, -ss / 2, ss, ss, 8 * u); ctx.fill();
