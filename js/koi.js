@@ -2,20 +2,24 @@
 // ---------- the koi: rides ink strokes as currents, sinks when it has none ----------
 const KOI = {
   G: 430,            // gravity (px/s^2) - the koi sinks without a current
-  THRUST: 150,       // swim thrust along the current, always toward +x
+  THRUST: 170,       // swim thrust along the current, in the direction the koi is riding it
   FRICTION: 0.55,    // per-second drag along a current
   MAXSPEED: 780,
   ATTACH_R: 17,
   DRAG_AIR: 0.35,
   TERMINAL: 470,
+  MIN_RIDE: 70,      // the koi always joins a current with at least this much speed
+  TURN_KEEP: 0.5,    // share of its speed the koi keeps when it has to turn into a current
   REATTACH_COOLDOWN: 0.3,
+  STALL_COOLDOWN: 0.8, // after stalling on a climb it won't grab the same stroke for this long
+  SWITCH_ROOM: 14,   // fresh ink must have this much stroke ahead before the koi will switch to it
 };
 
 class Koi {
   constructor(x, y) {
     this.x = x; this.y = y; this.vx = 60; this.vy = 0;
-    this.rail = null; this.s = 0; this.sp = 0;
-    this.lastRail = null; this.detachT = -9;
+    this.rail = null; this.s = 0; this.sp = 0; this.dir = 1;
+    this.lastRail = null; this.detachT = -9; this.cooldown = KOI.REATTACH_COOLDOWN;
     this.heading = 0; this.phase = 0;
     this.vitality = 1; this.mud = 0; // mud: visual darkening
     this.size = 1.25;
@@ -28,20 +32,50 @@ class Koi {
 
   speed() { return Math.hypot(this.vx, this.vy); }
 
-  attachTo(stroke, s) {
-    this.rail = stroke; this.s = s;
+  // which way along the stroke (+1 with the brush, -1 against it) carries the koi onward, toward +x
+  forwardDir(stroke, s) {
     const p = stroke.pointAt(s);
-    let sp = this.vx * p.tx + this.vy * p.ty;
-    if (Math.abs(sp) < 70) sp = p.tx >= 0 ? 70 : -70;
-    this.sp = sp;
+    if (Math.abs(p.tx) > 0.2) return p.tx > 0 ? 1 : -1;
+    return p.ty >= 0 ? 1 : -1; // near-vertical ink: ride it downward
+  }
+
+  attachTo(stroke, s) {
+    const dir = this.forwardDir(stroke, s);
+    const p = stroke.pointAt(s);
+    // the koi never rides a current backwards: it turns into it, keeping part of its speed
+    const along = (this.vx * p.tx + this.vy * p.ty) * dir;
+    this.rail = stroke; this.s = s; this.dir = dir;
+    this.sp = dir * Math.max(KOI.MIN_RIDE, along, this.speed() * KOI.TURN_KEEP);
     this.sinceAttach = 0;
   }
 
-  detach() {
+  detach(cooldown) {
     if (!this.rail) return;
     const p = this.rail.pointAt(this.s);
     this.vx = p.tx * this.sp; this.vy = p.ty * this.sp;
     this.lastRail = this.rail; this.rail = null; this.detachT = this.time;
+    this.cooldown = cooldown || KOI.REATTACH_COOLDOWN;
+  }
+
+  // a burst of speed along whatever the koi is doing (ink pearls)
+  surge(amount) {
+    if (this.rail) this.sp = clamp(this.sp + this.dir * amount, -KOI.MAXSPEED, KOI.MAXSPEED);
+    else { this.vx = Math.min(KOI.MAXSPEED, this.vx + amount); this.vy = Math.min(this.vy, this.vy * 0.4); }
+  }
+
+  // fresh ink painted across a riding koi takes over: this is how the player redirects it
+  findNewerRail(strokes) {
+    let best = null, bs = 0, bd = 1e9;
+    for (const st of strokes) {
+      if (st.id <= this.rail.id || st.dead || st.alpha < 0.3 || st.pts.length < 2) continue;
+      const s = st.nearest(this.x, this.y, KOI.ATTACH_R);
+      if (s < 0) continue;
+      const room = this.forwardDir(st, s) > 0 ? st.len - s : s;
+      if (room < KOI.SWITCH_ROOM) continue;
+      const p = st.pointAt(s); const d = dist(p.x, p.y, this.x, this.y);
+      if (d < bd) { bd = d; best = st; bs = s; }
+    }
+    return best ? { stroke: best, s: bs } : null;
   }
 
   update(dt, strokes, field, events) {
@@ -51,21 +85,33 @@ class Koi {
       if (r.dead || r.alpha < 0.28 || r.pts.length < 2) { this.detach(); }
       else {
         const p = r.pointAt(this.s);
-        const a = KOI.THRUST * p.tx + KOI.G * p.ty;
+        const a = KOI.THRUST * this.dir + KOI.G * p.ty;
         this.sp += a * dt;
         this.sp *= Math.max(0, 1 - KOI.FRICTION * dt);
         this.sp = clamp(this.sp, -KOI.MAXSPEED, KOI.MAXSPEED);
-        this.s += this.sp * dt;
-        if (this.s < 0 || this.s > r.len) {
-          this.s = clamp(this.s, 0, r.len);
-          const q = r.pointAt(this.s); this.x = q.x; this.y = q.y;
-          this.detach();
-          // a little hop off the end of the stroke
-          this.vy -= 40;
+        if (this.sp * this.dir <= 0) {
+          // out of momentum on a climb: slip off the current and sink rather than slide back
+          this.sp = 0;
+          this.detach(KOI.STALL_COOLDOWN);
+          this.vx = 30;
         } else {
-          const q = r.pointAt(this.s);
-          this.x = q.x; this.y = q.y;
-          this.vx = q.tx * this.sp; this.vy = q.ty * this.sp;
+          this.s += this.sp * dt;
+          if (this.s < 0 || this.s > r.len) {
+            this.s = clamp(this.s, 0, r.len);
+            const q = r.pointAt(this.s); this.x = q.x; this.y = q.y;
+            this.detach();
+            // a little hop off the end of the stroke
+            this.vy -= 40;
+          } else {
+            const q = r.pointAt(this.s);
+            this.x = q.x; this.y = q.y;
+            this.vx = q.tx * this.sp; this.vy = q.ty * this.sp;
+            const next = this.findNewerRail(strokes);
+            if (next) {
+              this.attachTo(next.stroke, next.s);
+              if (events) events.attach(this.x, this.y, 0);
+            }
+          }
         }
       }
     }
@@ -81,7 +127,7 @@ class Koi {
       let best = null, bs = 0, bd = 1e9;
       for (const st of strokes) {
         if (st.dead || st.alpha < 0.3) continue;
-        if (st === this.lastRail && this.time - this.detachT < KOI.REATTACH_COOLDOWN) continue;
+        if (st === this.lastRail && this.time - this.detachT < this.cooldown) continue;
         const s = st.nearest(this.x, this.y, KOI.ATTACH_R);
         if (s < 0) continue;
         const p = st.pointAt(s); const d = dist(p.x, p.y, this.x, this.y);

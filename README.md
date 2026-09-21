@@ -21,13 +21,15 @@ You hold a brush. A vermilion koi swims through an endless hand-painted scroll o
 Most ink-style games use ink as a *look*. Here the physical behaviour of ink is the design:
 
 - **The brush has pressure through speed.** Drag slowly and the stroke is wet, wide and heavy (浓墨): it costs a lot of ink but lasts long. Drag fast and you get 飞白, a thin dry-brush stroke with gaps: cheap, quick, but it fades sooner. Every stroke is one decision between economy and durability.
-- **Strokes are currents.** The koi attaches to any stroke it touches and slides along it. Gravity pulls it along the tangent, so downhill strokes are fast, uphill strokes need momentum, loops work. Off a stroke, the koi sinks. You are always painting a few seconds into the future.
+- **Strokes are currents.** The koi attaches to any stroke it touches and rides it onward (toward the right, whichever way you drew it). Gravity pulls it along the tangent, so downhill strokes are fast, uphill strokes need momentum, loops work. It never slides backwards: if it runs out of momentum on a climb it slips off and sinks. Off a stroke, the koi sinks. You are always painting a few seconds into the future.
+- **Fresh ink takes over.** Paint a new stroke across a riding koi and it switches to the newer current. This is how you change its course mid-ride: pull it off a doomed climb, dive under a hook, or chain strokes without waiting for it to fall off the end.
 - **Ink dries.** Strokes fade in six to ten seconds. The inkstone refills slowly; 墨珠 (ink pearls) refill it faster. Run dry mid-stroke and the brush literally trails off into 飞白.
 - **Ink bleeds.** Hazards are blots of thick ink on a live diffusion field: they soften and spread like ink on wet rice paper. Thick ink drowns the koi (神, its spirit, drains). The **water brush** dilutes a blot into harmless mist, pushing the ink outward exactly like clean water on a wash, and it can also wipe your own strokes.
 - **留白 is safety.** Blank paper is where the koi can breathe. The game is about deciding where to leave the paper empty.
+- **Pickups do something.** Each 墨珠 (ink pearl) refills the inkstone and gives the koi a surge of speed along its current, bigger with every pearl in an unbroken run (连珠), so threading a whole arc of pearls is a slingshot. A 莲 (lotus) restores spirit and water, sends a ring of clear water outward that washes away every ink blot within 260 px, and makes the ink tide ebb 300 px, rest for two seconds, then creep back.
 - **The ink tide.** A wall of black ink follows from the left and speeds up with distance. Stalling is fatal.
 
-Also: fishing hooks dangle from beyond the top of the scroll and knock the koi off its current, lotus flowers restore spirit, and every 6000 units the scroll turns a season (spring plum blossom, summer rain and green bamboo, autumn leaves, snow on the ridges) with a new vertical inscription and seal in the corner.
+Also: fishing hooks dangle from beyond the top of the scroll and knock the koi off its current, and every 6000 units the scroll turns a season (spring plum blossom, summer rain and green bamboo, autumn leaves, snow on the ridges) with a new vertical inscription and seal in the corner.
 
 ## Making of
 
