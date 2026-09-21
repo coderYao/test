@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ink Koi · cover art</title>
+<style>
+  body { margin: 24px; font: 15px/1.5 Georgia, serif; background: #ddd5c2; color: #1e1e28; }
+  figure { margin: 0 0 28px; } figcaption { margin: 6px 0; }
+  canvas { max-width: 100%; max-height: 80vh; border: 1px solid rgba(30,30,40,.3); display: block; }
+  iframe { position: fixed; left: -9999px; top: 0; border: 0; }
+  a { color: #b83228; }
+</style>
+</head>
+<body>
+<h1>墨鲤 Ink Koi · cover art</h1>
+<p>Portal covers painted by the game itself: the real scenery, brush, koi and pickups, composed for each
+aspect ratio, with only the game title on top (CrazyGames allows no other text, borders or logos).
+Serve the repository (<code>python3 tools/serve.py</code>) and open <code>/tools/covers.html</code>.
+Add <code>?seed=1234</code> for different mountains.</p>
+<div id="out">Painting…</div>
+
+<script>
+'use strict';
+// CrazyGames cover sizes: landscape 16:9, portrait 2:3, square 1:1
+const COVERS = [
+  { name: 'cover-landscape-1920x1080', w: 1920, h: 1080 },
+  { name: 'cover-portrait-800x1200', w: 800, h: 1200 },
+  { name: 'cover-square-800x800', w: 800, h: 800 },
+];
+const seed = +(new URLSearchParams(location.search).get('seed') || 20260920);
+
+// Runs inside the game's own page (an off-screen iframe of exactly the cover's size): stage a moment of play.
+function compose(seed) {
+  const g = window.game, W = g.LW, H = 720;
+  g.seed = seed; g.scenery = new Scenery(seed); g.scenery.makePaper(g.ctx); g.resize();
+  g.reset(); g.strokes.length = 0; g.guide = null; g.state = 'title'; g.time = 7.3;
+  g.camX = 2400; g.field.shiftTo(g.camX - 150);
+  const cx = g.camX, wide = W > 900;
+  // one long brush stroke: it dips, then climbs toward the right like a rising current
+  const s = new Stroke(), x0 = cx - 60, x1 = cx + W * (wide ? 0.78 : 0.97), n = 90;
+  for (let i = 0; i <= n; i++) {
+    const k = i / n, x = x0 + (x1 - x0) * k;
+    const y = H * 0.60 + Math.sin(k * Math.PI * 1.15 + 0.2) * H * 0.095 - k * k * H * 0.13;
+    const w = 15 - 9 * smoothstep(0.5, 1, k) + Math.sin(k * 9) * 1.2;
+    s.add(x, y, w, smoothstep(0.72, 1, k) * 0.9);
+  }
+  s.finish(); s.life = 1e9; g.strokes.push(s);
+  // the koi, mid-stroke and moving fast
+  const koi = g.koi; koi.size = wide ? 2.0 : 1.75;
+  koi.attachTo(s, s.len * (wide ? 0.50 : 0.34)); koi.sp = 520;
+  const field = { sample: () => 0 };
+  for (let i = 0; i < 24; i++) koi.update(1 / 60, g.strokes, field, null);
+  // pearls strung ahead of it, a lotus above, thick ink drifting nearby, the tide at its tail
+  const w = g.world; w.pearls.length = 0; w.lotus.length = 0; w.hooks.length = 0; w.clouds.length = 0;
+  for (let i = 1; i <= 5; i++) { const p = s.pointAt(koi.s + (wide ? 70 + i * 46 : 50 + i * 34)); w.pearls.push({ x: p.x, y: p.y - 30 - Math.sin(i / 6 * Math.PI) * 26, taken: false, t: i }); }
+  w.lotus.push({ x: cx + W * (wide ? 0.80 : 0.74), y: H * (wide ? 0.30 : 0.36), taken: false, t: 1 });
+  g.field.deposit(cx + W * 0.30, H * 0.84, wide ? 92 : 70, 1.25);
+  g.field.deposit(cx + W * (wide ? 0.90 : 0.95), H * 0.70, 64, 1.1);
+  for (let i = 0; i < 50; i++) g.field.step(1 / 60);
+  w.tideX = cx + (wide ? 30 : -10);
+  // spring petals in the air, and the wake off the koi's tail
+  g.particles.length = 0; g.ripples.length = 0; g.floaters.length = 0;
+  for (let i = 0; i < 40; i++) g.spawnSeasonParticles(1 / 20);
+  g.streak(koi, 16);
+  for (let i = 0; i < 6; i++) { g.updateParticles(1 / 60); }
+  document.querySelectorAll('.overlay, #controls, #rotate').forEach(el => { el.style.display = 'none'; });
+  g.drawInscription = () => {};   // covers may carry the game title and nothing else
+  g.loop = () => {};   // freeze: the page's own animation loop must not repaint over the composition
+  g.pointer.inside = false;
+  // render() in the title state draws the world but no HUD, hints or cursor
+  g.render();
+  return { W, H };
+}
+
+function title(ctx, w, h) {
+  const FONT_BRUSH = '"Ma Shan Zheng", "KaiTi", "STKaiti", serif';
+  const u = Math.min(w, h * 1.45) / 1920;           // type scale
+  const portrait = h > w, x = w * (portrait ? 0.5 : 0.085), y = h * (portrait ? 0.215 : 0.30);
+  ctx.save();
+  ctx.textAlign = portrait ? 'center' : 'left'; ctx.textBaseline = 'alphabetic';
+  // a breath of bare paper behind the title so it reads over the mountains
+  const r = 560 * u, gx = portrait ? x : x + 300 * u, gy = y - 60 * u;
+  const halo = ctx.createRadialGradient(gx, gy, r * 0.1, gx, gy, r);
+  halo.addColorStop(0, 'rgba(240,233,217,0.85)'); halo.addColorStop(1, 'rgba(240,233,217,0)');
+  ctx.fillStyle = halo; ctx.fillRect(gx - r, gy - r, r * 2, r * 2);
+  ctx.fillStyle = 'rgba(24,24,32,0.95)';
+  ctx.font = `${300 * u}px ${FONT_BRUSH}`;
+  const zh = '墨鲤', zw = ctx.measureText(zh).width;
+  ctx.fillText(zh, x, y);
+  ctx.font = `${118 * u}px ${FONT_BRUSH}`;
+  ctx.fillText('Ink Koi', portrait ? x : x + 8 * u, y + 150 * u);
+  // the red seal, tucked against the last character
+  const sx = (portrait ? x + zw / 2 : x + zw) + 26 * u, sy = y - 250 * u, ss = 92 * u;
+  ctx.translate(sx + ss / 2, sy + ss / 2); ctx.rotate(-0.07);
+  ctx.fillStyle = 'rgba(184,50,40,0.94)';
+  ctx.beginPath(); ctx.roundRect(-ss / 2, -ss / 2, ss, ss, 8 * u); ctx.fill();
+  ctx.fillStyle = 'rgba(241,234,219,0.96)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `${64 * u}px ${FONT_BRUSH}`; ctx.fillText('墨', 0, 4 * u);
+  ctx.restore();
+}
+
+function paint(cover) {
+  return new Promise(resolve => {
+    const f = document.createElement('iframe');
+    f.width = cover.w; f.height = cover.h; f.src = '../index.html';
+    f.onload = async () => {
+      const win = f.contentWindow;
+      while (!(win.game && win.game.render)) await new Promise(r => setTimeout(r, 50));
+      await win.document.fonts.ready;
+      win.eval('(' + compose + ')(' + seed + ')');
+      const out = document.createElement('canvas'); out.width = cover.w; out.height = cover.h;
+      const ctx = out.getContext('2d');
+      ctx.drawImage(win.document.getElementById('game'), 0, 0, cover.w, cover.h);
+      await document.fonts.load('200px "Ma Shan Zheng"', '墨鲤 Ink Koi');
+      title(ctx, cover.w, cover.h);
+      f.remove();
+      resolve(out);
+    };
+    document.body.appendChild(f);
+  });
+}
+
+(async () => {
+  const font = document.createElement('link'); font.rel = 'stylesheet';
+  font.href = 'https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap';
+  // the @font-face rules must be registered before fonts.load() can find the brush face for the title
+  await new Promise(r => { font.onload = font.onerror = r; document.head.appendChild(font); });
+  const out = document.getElementById('out'); out.textContent = '';
+  window.covers = {};
+  for (const c of COVERS) {
+    const canvas = await paint(c); window.covers[c.name] = canvas;
+    const fig = document.createElement('figure'), cap = document.createElement('figcaption'), a = document.createElement('a');
+    a.textContent = `Download ${c.name}.png`; a.download = c.name + '.png'; a.href = '#';
+    a.onclick = () => { a.href = canvas.toDataURL('image/png'); };
+    cap.append(`${c.w} × ${c.h} · `, a); fig.append(cap, canvas); out.append(fig);
+  }
+  document.title = 'Ink Koi · covers ready';
+})();
+</script>
+</body>
+</html>

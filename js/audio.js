@@ -1,7 +1,7 @@
 'use strict';
 // ---------- procedural audio: guqin plucks, water, brush scratch, ambience ----------
 const Audio = (() => {
-  let ac = null, master = null, muted = false, ready = false;
+  let ac = null, master = null, muted = false, ducked = false, ready = false;
   let brushGain = null, brushSrc = null, ambGain = null;
   const pluckCache = new Map();
   // D major pentatonic across two octaves (D E F# A B)
@@ -13,7 +13,7 @@ const Audio = (() => {
       ac = new (window.AudioContext || window.webkitAudioContext)();
     } catch (e) { return; }
     master = ac.createGain();
-    master.gain.value = muted ? 0 : 0.8;
+    master.gain.value = muted || ducked ? 0 : 0.8;
     master.connect(ac.destination);
     ready = true;
     startAmbience();
@@ -128,10 +128,10 @@ const Audio = (() => {
     brushGain.gain.setTargetAtTime(target, ac.currentTime, 0.04);
   }
 
-  function setMuted(m) {
-    muted = m;
-    if (master) master.gain.setTargetAtTime(m ? 0 : 0.8, ac.currentTime, 0.05);
-  }
+  const applyGain = () => { if (master) master.gain.setTargetAtTime(muted || ducked ? 0 : 0.8, ac.currentTime, 0.05); };
+  function setMuted(m) { muted = m; applyGain(); }
+  // silence imposed from outside (an ad is playing, the portal's mute setting); independent of the player's own mute
+  function setDucked(d) { ducked = d; applyGain(); }
 
-  return { init, resume, pluck, splash, drip, chord, dissolve, brush, setMuted, isMuted: () => muted, isReady: () => ready };
+  return { init, resume, pluck, splash, drip, chord, dissolve, brush, setMuted, setDucked, isMuted: () => muted, isReady: () => ready };
 })();

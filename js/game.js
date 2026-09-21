@@ -31,7 +31,7 @@ class Game {
     this.pointer = { x: 0, y: 0, down: false, type: 'mouse', sx: 0, sy: 0, ts: 0, inside: false };
     this.waterHold = false; this.waterToggle = false;
     this.paused = false;
-    this.best = +(localStorage.getItem('moli.best') || 0);
+    this.best = +(Platform.storage.get('moli.best') || 0);
     this.particles = []; this.ripples = []; this.ambient = [];
     this.floaters = [];
     this.purifies = []; // expanding rings of clear water from a lotus
@@ -41,7 +41,11 @@ class Game {
     this.reset();
     this.bindInput();
     window.addEventListener('resize', () => this.resize());
-    document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'play') this.paused = true; });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) return;
+      if (this.state === 'play') this.paused = true;
+      Platform.setPlaying(false); // frames stop while hidden, so loop() cannot report this
+    });
     requestAnimationFrame(t => this.loop(t));
   }
 
@@ -80,7 +84,17 @@ class Game {
     this.field.shiftTo(-150);
   }
 
+  // begin a run. Restarting after a death is a natural break, so that is where the portal may show an ad.
   start() {
+    if (this.adPending) return;
+    if (this.state !== 'over') { this.beginRun(); return; }
+    const again = document.getElementById('btn-again');
+    this.adPending = true; again.disabled = true;
+    Platform.midgameAd(() => Audio.setDucked(true), () => Audio.setDucked(Platform.muted()))
+      .then(() => { this.adPending = false; again.disabled = false; this.beginRun(); });
+  }
+
+  beginRun() {
     this.reset();
     this.state = 'play'; this.paused = false;
     document.getElementById('title').classList.add('hidden');
@@ -140,9 +154,7 @@ class Game {
 
   toggleMute() {
     Audio.init(); Audio.setMuted(!Audio.isMuted());
-    const b = document.getElementById('btn-mute');
-    b.querySelector('.glyph').textContent = Audio.isMuted() ? '默' : '音';
-    b.querySelector('.en').textContent = Audio.isMuted() ? 'Muted' : 'Sound';
+    syncMuteButton();
   }
 
   isWater() { return this.waterHold || this.waterToggle || this.pointer.button === 2; }
@@ -197,6 +209,7 @@ class Game {
     requestAnimationFrame(t => this.loop(t));
     let dt = (now - this.last) / 1000; this.last = now;
     if (dt > 0.05) dt = 0.05;
+    Platform.setPlaying(this.state === 'play' && !this.paused && !this.adPending);
     if (!this.paused && this.state !== 'title') this.update(dt);
     else if (this.state === 'title') this.updateTitle(dt);
     this.render();
@@ -354,9 +367,12 @@ class Game {
   gameOver() {
     this.state = 'over';
     const sc = this.score();
+    // re-read the stored best: if the portal SDK came up late, the account's record may beat the one read at boot
+    this.best = Math.max(this.best, +(Platform.storage.get('moli.best') || 0));
     const newBest = this.best > 0 && sc > this.best;
     this.overT = 0;
-    if (sc > this.best) { this.best = sc; localStorage.setItem('moli.best', String(sc)); }
+    if (newBest) Platform.happytime();
+    if (sc > this.best) { this.best = sc; Platform.storage.set('moli.best', String(sc)); }
     const r = REASONS[this.deathReason] || REASONS.ink;
     document.getElementById('over-reason').textContent = r[0];
     document.getElementById('over-reason-en').textContent = r[1];
@@ -664,10 +680,27 @@ class Game {
   }
 }
 
-window.addEventListener('load', () => {
-  const boot = () => { window.game = new Game(document.getElementById('game')); };
-  if (document.fonts && document.fonts.load) {
-    Promise.all([document.fonts.load('30px "Ma Shan Zheng"'), document.fonts.load('16px "Noto Serif SC"')]).then(boot, boot);
-    setTimeout(() => { if (!window.game) boot(); }, 2500);
-  } else boot();
+// the 音 / Sound button shows silence from either source: the player's own toggle, or the portal's mute setting
+function syncMuteButton() {
+  const b = document.getElementById('btn-mute'), site = Platform.muted(), off = site || Audio.isMuted();
+  b.querySelector('.glyph').textContent = off ? '默' : '音';
+  b.querySelector('.en').textContent = off ? 'Muted' : 'Sound';
+  b.classList.toggle('site-muted', site);
+  b.title = site ? '已由网站静音 · Muted by the site' : '音 Sound (M)';
+}
+
+window.addEventListener('load', async () => {
+  // fonts and the portal SDK load side by side; neither may hold the game up for long
+  const faces = document.fonts && document.fonts.load
+    ? Promise.all([document.fonts.load('30px "Ma Shan Zheng"'), document.fonts.load('16px "Noto Serif SC"')]).catch(() => {})
+    : Promise.resolve();
+  const fonts = Promise.race([faces, new Promise(r => setTimeout(r, 2500))]); // blocked or slow: fallback faces
+  await Platform.init();
+  Platform.loadingStart();
+  const applyMute = m => { Audio.setDucked(m); syncMuteButton(); };
+  applyMute(Platform.muted());
+  Platform.onMuteChange(applyMute);
+  await fonts;
+  try { window.game = new Game(document.getElementById('game')); }
+  finally { Platform.loadingStop(); }
 });
