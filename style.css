@@ -57,6 +57,17 @@ button:hover { background: #1e1e28; color: #f1eadb; }
   .panel { padding: 22px 20px; max-width: 92vw; max-height: 88vh; overflow: auto; }
   h1 { font-size: 60px; } .how { font-size: 13px; } .en { font-size: 13px; } .lead .en { font-size: 14px; }
 }
+/* laptop-height viewports: the bilingual card is ~630px tall single-column, so go two-up before it clips */
+@media (max-height: 700px) {
+  .panel { max-width: min(900px, 94vw); padding: 20px 34px; }
+  h1 { font-size: 60px; display: inline-block; } h1.small { font-size: 44px; }
+  h2 { display: inline-block; font-size: 26px; margin: 0 0 6px 16px; letter-spacing: .25em; }
+  .lead { margin: 0 0 10px; }
+  .how { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; margin: 0 0 12px; } .how li { margin: 0; }
+  .over-panel { padding: 20px 36px 16px; } .over-panel h1.small { display: block; }
+  .score { font-size: 72px; } .scorebox { margin: 8px 0; } .tip { margin-top: 8px; padding: 7px 12px; }
+  .stats { margin-bottom: 14px; } .stats > div { padding: 7px 4px 6px; } .keys { margin-top: 8px; }
+}
 /* short screens (phones in landscape): both languages stay, the list goes two-up so it still fits */
 @media (max-height: 560px) {
   .panel { max-width: min(880px, 94vw); padding: 14px 26px; }

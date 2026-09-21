@@ -217,6 +217,7 @@ class Game {
   }
 
   update(dt) {
+    if (this.state === 'over') this.overT = (this.overT || 0) + dt;
     this.time += dt; this.elapsed += dt;
     const koi = this.koi, W = this.LW;
     // guide stroke
@@ -353,7 +354,8 @@ class Game {
   gameOver() {
     this.state = 'over';
     const sc = this.score();
-    const newBest = sc > this.best && sc > 0;
+    const newBest = this.best > 0 && sc > this.best;
+    this.overT = 0;
     if (sc > this.best) { this.best = sc; localStorage.setItem('moli.best', String(sc)); }
     const r = REASONS[this.deathReason] || REASONS.ink;
     document.getElementById('over-reason').textContent = r[0];
@@ -476,7 +478,8 @@ class Game {
       ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
     }
     if (this.state === 'title') { this.drawInscription(ctx, W, H, 0.6); return; }
-    if (this.state !== 'over') this.drawHUD(ctx, W, H);
+    const hudA = this.state === 'over' ? clamp(1 - (this.overT || 0) / 0.45, 0, 1) : 1; // fades as the game-over card fades in
+    if (hudA > 0) { ctx.save(); ctx.globalAlpha = hudA; this.drawHUD(ctx, W, H); ctx.restore(); }
     this.drawInscription(ctx, W, H, 1);
     this.drawHints(ctx, W, H);
     this.drawCursor(ctx);
@@ -533,7 +536,7 @@ class Game {
     ctx.beginPath(); ctx.moveTo(24, 128); ctx.lineTo(180, 128); ctx.stroke();
     ctx.strokeStyle = `rgba(${lerp(60, 214, v)},${lerp(60, 78, v)},${lerp(70, 40, v)},0.9)`; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(24, 128); ctx.lineTo(24 + 156 * v, 128); ctx.stroke();
-    ctx.fillStyle = 'rgba(30,30,40,0.85)'; ctx.fillStyle = 'rgba(30,30,40,0.92)'; ctx.font = `20px ${FONT_BRUSH}`; ctx.textAlign = 'left'; ctx.fillText('神', 188, 135);
+    ctx.fillStyle = 'rgba(30,30,40,0.92)'; ctx.font = `20px ${FONT_BRUSH}`; ctx.textAlign = 'left'; ctx.fillText('神', 188, 135);
     ctx.font = `600 17px ${FONT_TEXT}`; ctx.fillText('Spirit', 212, 134);
     // score
     ctx.textAlign = 'right';
@@ -542,12 +545,12 @@ class Game {
     // labelled rows: brush glyphs, then the English, then the value
     const row = (zh, en, val, y) => {
       ctx.fillStyle = 'rgba(30,30,40,0.92)';
-      ctx.font = `600 17px ${FONT_TEXT}`; ctx.fillText(val, W - 110, y);
-      const ex = val ? W - 120 - ctx.measureText(val).width : W - 110;
+      const valFont = `600 17px ${FONT_TEXT}`, enFont = `600 16px ${FONT_TEXT}`;
+      const ex = val ? W - 120 - this.textW(ctx, valFont, val) : W - 110;
+      ctx.font = valFont; ctx.fillText(val, W - 110, y);
       ctx.fillStyle = 'rgba(30,30,40,0.8)';
-      ctx.font = `600 16px ${FONT_TEXT}`; ctx.fillText(en, ex, y);
-      const ew = ctx.measureText(en).width;
-      ctx.font = `19px ${FONT_BRUSH}`; ctx.fillText(zh, ex - 6 - ew, y + 1);
+      ctx.font = enFont; ctx.fillText(en, ex, y);
+      ctx.font = `19px ${FONT_BRUSH}`; ctx.fillText(zh, ex - 6 - this.textW(ctx, enFont, en), y + 1);
     };
     row('得分', 'Score', '', 84);
     row('行', 'Distance', `${Math.floor(this.distance / 10)} 丈`, 110);
@@ -555,8 +558,8 @@ class Game {
     if (this.best > 0) row('最远', 'Best', String(this.best), 154);
     if (this.combo > 1) {
       ctx.fillStyle = `rgba(200,60,50,${clamp(this.comboT, 0, 1)})`;
-      ctx.font = `600 18px ${FONT_TEXT}`; ctx.fillText(`Combo ×${this.combo}`, W - 110, 183);
-      const cw = ctx.measureText(`Combo ×${this.combo}`).width;
+      const comboFont = `600 18px ${FONT_TEXT}`, cw = this.textW(ctx, comboFont, `Combo ×${this.combo}`);
+      ctx.font = comboFont; ctx.fillText(`Combo ×${this.combo}`, W - 110, 183);
       ctx.font = `24px ${FONT_BRUSH}`; ctx.fillText('连珠', W - 118 - cw, 184);
     }
     ctx.restore();
@@ -564,13 +567,29 @@ class Game {
 
   // a HUD label: brush glyph with its English beside it, centred as a pair on x
   label(ctx, zh, en, x, y) {
-    ctx.fillStyle = 'rgba(30,30,40,0.92)';
-    ctx.font = `600 17px ${FONT_TEXT}`; const ew = ctx.measureText(en).width;
-    ctx.font = `22px ${FONT_BRUSH}`; const zw = ctx.measureText(zh).width;
+    const enFont = `600 17px ${FONT_TEXT}`, zhFont = `22px ${FONT_BRUSH}`;
+    const ew = this.textW(ctx, enFont, en), zw = this.textW(ctx, zhFont, zh);
     const x0 = x - (zw + 6 + ew) / 2;
-    ctx.textAlign = 'left'; ctx.fillText(zh, x0, y);
-    ctx.font = `600 17px ${FONT_TEXT}`; ctx.fillText(en, x0 + zw + 6, y - 1);
-    ctx.textAlign = 'center';
+    ctx.save();
+    ctx.fillStyle = 'rgba(30,30,40,0.92)'; ctx.textAlign = 'left';
+    ctx.font = zhFont; ctx.fillText(zh, x0, y);
+    ctx.font = enFont; ctx.fillText(en, x0 + zw + 6, y - 1);
+    ctx.restore();
+  }
+
+  // measured text width, remembered: HUD labels are the same strings every frame
+  textW(ctx, font, text) {
+    const key = font + '|' + text, memo = this.textWidths || (this.textWidths = new Map());
+    let w = memo.get(key);
+    if (w === undefined) { if (memo.size > 300) memo.clear(); ctx.font = font; w = ctx.measureText(text).width; memo.set(key, w); }
+    return w;
+  }
+
+  // centred text that never runs off a narrow canvas: shrinks to fit the width
+  fitText(ctx, text, px, font, y, W, weight = '') {
+    const w = this.textW(ctx, `${weight}${px}px ${font}`, text), max = W - 48;
+    ctx.font = `${weight}${w > max ? Math.floor(px * max / w) : px}px ${font}`;
+    ctx.fillText(text, W / 2, y);
   }
 
   drawInscription(ctx, W, H, alpha) {
@@ -603,7 +622,7 @@ class Game {
       ctx.fillStyle = 'rgba(30,30,40,0.9)'; ctx.font = `72px ${FONT_BRUSH}`; ctx.textAlign = 'center';
       ctx.fillText(SEASONS[si].name, W / 2, H * 0.4);
       ctx.font = `600 34px ${FONT_TEXT}`; ctx.fillText(SEASONS[si].en, W / 2, H * 0.4 + 48);
-      ctx.font = `20px ${FONT_TEXT}`; ctx.fillText(POEMS[si] + ' · ' + POEMS_EN[si], W / 2, H * 0.4 + 82);
+      this.fitText(ctx, POEMS[si] + ' · ' + POEMS_EN[si], 20, FONT_TEXT, H * 0.4 + 82, W);
       ctx.restore();
     }
   }
@@ -612,15 +631,17 @@ class Game {
     ctx.save(); ctx.textAlign = 'center';
     if (!this.drewOnce && this.state === 'play') {
       const a = 0.6 + 0.4 * Math.sin(this.time * 3);
-      ctx.fillStyle = `rgba(30,30,40,${a})`; ctx.font = `26px ${FONT_BRUSH}`;
-      ctx.fillText('画一笔，锦鲤便顺着墨流而去', W / 2, H * 0.22);
-      ctx.font = `600 21px ${FONT_TEXT}`; ctx.fillText('Draw a stroke. The koi rides your ink as a current.', W / 2, H * 0.22 + 34);
+      ctx.fillStyle = `rgba(30,30,40,${a})`;
+      this.fitText(ctx, '画一笔，锦鲤便顺着墨流而去', 26, FONT_BRUSH, H * 0.22, W);
+      this.fitText(ctx, 'Draw a stroke. The koi rides your ink as a current.', 21, FONT_TEXT, H * 0.22 + 34, W, '600 ');
     }
     if (this.waterHintT > 0) {
       const a = Math.min(1, this.waterHintT);
-      ctx.fillStyle = `rgba(30,30,40,${a})`; ctx.font = `24px ${FONT_BRUSH}`;
-      ctx.fillText('浓墨伤鱼 · 按住 Shift 以清水化开', W / 2, H * 0.22);
-      ctx.font = `600 20px ${FONT_TEXT}`; ctx.fillText('Thick ink hurts the koi. Hold Shift, right-drag, or tap 水 to wash it away.', W / 2, H * 0.22 + 32);
+      ctx.fillStyle = `rgba(30,30,40,${a})`;
+      this.fitText(ctx, '浓墨伤鱼 · 按住 Shift 以清水化开', 24, FONT_BRUSH, H * 0.22, W);
+      const hurt = 'Thick ink hurts the koi.', wash = 'Hold Shift, right-drag, or tap 水 to wash it away.';
+      if (this.textW(ctx, `600 20px ${FONT_TEXT}`, hurt + ' ' + wash) <= W - 48) this.fitText(ctx, hurt + ' ' + wash, 20, FONT_TEXT, H * 0.22 + 32, W, '600 ');
+      else { this.fitText(ctx, hurt, 20, FONT_TEXT, H * 0.22 + 32, W, '600 '); this.fitText(ctx, wash, 20, FONT_TEXT, H * 0.22 + 58, W, '600 '); }
     }
     ctx.restore();
   }
