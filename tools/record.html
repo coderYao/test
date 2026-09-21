@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ink Koi · preview video</title>
+<style>
+  body { margin: 24px; font: 15px/1.5 Georgia, serif; background: #ddd5c2; color: #1e1e28; }
+  canvas { max-width: 100%; max-height: 70vh; border: 1px solid rgba(30,30,40,.3); display: block; margin: 10px 0; }
+  iframe { position: fixed; left: -9999px; top: 0; border: 0; }
+  code { background: rgba(30,30,40,.08); padding: 0 4px; }
+</style>
+</head>
+<body>
+<h1>墨鲤 Ink Koi · preview video</h1>
+<p>Renders a portal preview video offline, frame by frame: the real game stepped at a fixed 60 Hz while a
+scripted brush plays it, so the result is identical on any machine and carries no system cursor. It opens on
+the cover image and fades into play.</p>
+<p><code>?format=landscape</code> (1920×1080) or <code>?format=portrait</code> (1080×1620), <code>&seconds=18</code>.
+Add <code>&post=http://localhost:8002</code> to send frames to <code>tools/collect_frames.py</code>, which encodes
+the MP4 with ffmpeg; without it the page just plays the take through. <code>&dry=1</code> skips rendering and
+prints the run log, for tuning the choreography.</p>
+<p id="status">Starting…</p>
+<canvas id="out"></canvas>
+<pre id="log"></pre>
+
+<script>
+'use strict';
+const q = new URLSearchParams(location.search);
+const FORMAT = q.get('format') === 'portrait' ? 'portrait' : 'landscape';
+const SIZE = FORMAT === 'portrait' ? { w: 1080, h: 1620 } : { w: 1920, h: 1080 };
+const FPS = 30, SECONDS = +(q.get('seconds') || 18), POST = q.get('post'), DRY = q.has('dry');
+const COVER_HOLD = 1.0, COVER_FADE = 0.6;       // seconds the cover is held, then cross-faded into play
+const PREROLL = 0.9;                            // seconds of play that happen before the first frame
+const status = t => { document.getElementById('status').textContent = t; document.title = 'Ink Koi · ' + t; };
+
+// ---------------------------------------------------------------------------------------------------------
+// The director runs inside the game's own page. It stages a scroll worth filming and plays it with the same
+// calls the pointer handlers make (beginStroke / extendStroke / endStroke / applyWater), one 60 Hz tick at a time.
+// ---------------------------------------------------------------------------------------------------------
+function makeDirector(cfg) {
+  const g = window.game;
+  let rs = cfg.seed >>> 0;                                   // a fixed random stream: every take is identical
+  Math.random = () => ((rs = (Math.imul(rs, 1664525) + 1013904223) >>> 0) / 4294967296);
+  g.seed = cfg.seed; g.scenery = new Scenery(cfg.seed); g.scenery.makePaper(g.ctx); g.resize();
+  g.loop = () => {};                                         // we drive update() and render() ourselves
+  g.beginRun(); g.best = 0;
+  g.drewOnce = true; g.waterHintShown = true;                // no tutorial hints: a preview shows play, not instructions
+  const W = g.LW, narrow = W < 900;
+  if (narrow) {                                              // in a 2:3 frame the two HUD blocks collide: keep the gauges,
+    const hud = g.drawHUD.bind(g);                           // and let the right-aligned score block land outside the frame
+    g.drawHUD = (ctx, w, h) => hud(ctx, w + 420, h);
+  }
+
+  // the lane the brush follows: leaves the opening stroke at (640, 372) heading downhill, then rolls in
+  // waves gentle enough (under 15 degrees) for the koi to climb on momentum
+  const lane = x => 372 + 100 * Math.sin((x - 640) / 430) + 34 * Math.sin((x - 640) / 1130);
+
+  // the scroll: nothing procedural, everything placed for the camera
+  const w = g.world; w.ensure = () => {};
+  w.pearls.length = 0; w.lotus.length = 0; w.hooks.length = 0; w.clouds.length = 0;
+  const pearls = (x0, n) => { for (let i = 0; i < n; i++) { const x = x0 + i * 42; w.pearls.push({ x, y: lane(x) - 5, taken: false, t: i * 1.3 }); } };
+  const cloud = (x, y, r) => { for (let i = 0; i < 4; i++) { const a = i * 1.7 + x, d = i ? r * 0.55 : 0; w.clouds.push({ x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, r: r * (i ? 0.62 : 0.9), amt: 1.05, deposited: false }); } };
+  pearls(1420, 5);
+  cloud(1150, lane(1150) + 190, 58); cloud(1980, lane(1980) - 185, 52);
+  // thick ink right on the lane, to be washed out with the water brush. A 2:3 frame cannot show the road that far
+  // ahead of the koi, so there the blot sits below the lane instead and the water scene is skipped.
+  const WASH = { x: 2860, r: 56 }; WASH.y = lane(WASH.x) + (narrow ? 175 : -8); cloud(WASH.x, WASH.y, WASH.r);
+  pearls(3240, 4);
+  const LOTUS = 3980; w.lotus.push({ x: LOTUS, y: lane(LOTUS) - 4, taken: false, t: 0.4 });
+  cloud(LOTUS + 170, lane(LOTUS + 170) - 46, 60); cloud(LOTUS + 60, lane(LOTUS + 60) + 120, 54); cloud(LOTUS - 90, lane(LOTUS - 90) - 150, 46);
+  pearls(4620, 6);
+  w.hooks.push({ x: 5420, len: lane(5420) - 175, phase: 1.1, sway: 18 });
+  cloud(5700, lane(5700) + 180, 64);
+  pearls(6240, 5); pearls(7300, 5);
+
+  // the hand
+  const pen = { x: 640, y: 372, mode: 'idle', u: 0, from: 0, len: 0, phase: 0, t: 0, then: null, tx: 0, ty: 0 };
+  let strokeEnd = 640;                                        // world x where the painted current presently ends
+  let washed = narrow;
+  const WASH_STOP = WASH.x - 105;                             // the water brush erodes strokes too, so the road stops short of the blot until it is clean
+  const LEAD = narrow ? 0.62 : 0.95;                          // start the next stroke this many seconds before the koi runs out
+  const REACH = narrow ? [250, 300] : [430, 520];             // stroke length range: a narrow frame shows less road ahead
+  const log = [];
+
+  const moveTo = (x, y, then) => { pen.mode = 'move'; pen.tx = x; pen.ty = y; pen.then = then; };
+  const startStroke = (len) => {
+    pen.mode = 'draw'; pen.u = 0; pen.from = strokeEnd - 46; pen.len = len; pen.phase = Math.random() * 6;
+    pen.x = pen.from; pen.y = lane(pen.from);
+    g.beginStroke(pen.x, pen.y);
+  };
+
+  function tick(dt) {
+    const koi = g.koi;
+    if (g.state === 'play') {
+      if (pen.mode === 'move') {
+        const dx = pen.tx - pen.x, dy = pen.ty - pen.y, d = Math.hypot(dx, dy), stepLen = 1500 * dt;
+        if (d <= stepLen) { pen.x = pen.tx; pen.y = pen.ty; const f = pen.then; pen.then = null; pen.mode = 'idle'; if (f) f(); }
+        else { pen.x += dx / d * stepLen; pen.y += dy / d * stepLen; }
+      } else if (pen.mode === 'draw') {
+        // a brush stroke lands slow and heavy, runs fast through the middle, and lifts off light
+        const speed = (narrow ? 840 : 880) * (0.5 + 0.85 * Math.sin(Math.PI * Math.min(1, pen.u + 0.04)));
+        pen.u += speed * dt / pen.len;
+        const u = Math.min(1, pen.u), x = pen.from + u * pen.len;
+        const y = lane(x) + Math.sin(u * 5 + pen.phase) * 3.5 * Math.sin(Math.PI * u);
+        const dl = Math.hypot(x - pen.x, y - pen.y);
+        pen.x = x; pen.y = y;
+        g.extendStroke(x, y, speed, dl);
+        if (pen.u >= 1 || !g.cur) { g.endStroke(); strokeEnd = x; pen.mode = 'idle'; }
+      } else if (pen.mode === 'water') {
+        pen.t += dt;
+        const a = pen.t * 9, r = WASH.r * (0.25 + 0.5 * Math.abs(Math.sin(pen.t * 2.3)));
+        const x = WASH.x + Math.cos(a) * r, y = WASH.y + Math.sin(a) * r * 0.8;
+        g.applyWater(x, y, Math.hypot(x - pen.x, y - pen.y));
+        pen.x = x; pen.y = y;
+        if (pen.t > 1.25 || g.field.sample(WASH.x, WASH.y) < 0.12 && pen.t > 0.7) { g.waterHold = false; washed = true; moveTo(strokeEnd, lane(strokeEnd), null); }
+      } else {
+        const runway = (strokeEnd - koi.x) / Math.max(koi.vx, 260);
+        const gap = WASH_STOP - strokeEnd;
+        if (!washed && gap < 20) {
+          // thick ink sits on the road ahead: switch to the water brush and wash it out before the koi gets there
+          pen.t = 0; moveTo(WASH.x - 20, WASH.y - 10, () => { g.waterHold = true; pen.mode = 'water'; });
+        } else if (!washed && gap < REACH[1] * 1.7) {
+          if (runway < LEAD + 0.5) startStroke(gap + 46);      // one long stroke up to the blot buys the time to wash it
+        } else if (runway < LEAD && g.ink > 0.06) {
+          startStroke(REACH[0] + Math.random() * (REACH[1] - REACH[0]));
+        }
+      }
+      g.pointer.type = 'mouse'; g.pointer.inside = true; g.pointer.down = pen.mode === 'draw' || pen.mode === 'water';
+      g.pointer.x = pen.x - g.camX; g.pointer.y = pen.y;
+    }
+    g.update(dt);
+    g.pointer.x = pen.x - g.camX;                             // the camera moved: keep the brush tip on its world point
+  }
+
+  return {
+    tick,
+    render: () => g.render(),
+    canvas: document.getElementById('game'),
+    sample: t => log.push(`${t.toFixed(1)}s x=${g.koi.x.toFixed(0)} y=${g.koi.y.toFixed(0)} v=${g.koi.speed().toFixed(0)} rail=${g.koi.rail ? 'y' : '-'} ink=${g.ink.toFixed(2)} spirit=${g.koi.vitality.toFixed(2)} pearls=${g.pearls} lotus=${g.lotusN} pen=${pen.mode} state=${g.state} washInk=${g.field.sample(WASH.x, WASH.y).toFixed(2)}`),
+    log, state: () => g.state,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+
+function frame(src, w, h) {
+  return new Promise(resolve => {
+    const f = document.createElement('iframe'); f.width = w; f.height = h; f.src = src;
+    f.onload = () => resolve(f); document.body.appendChild(f);
+  });
+}
+
+async function coverImage() {
+  const f = await frame(`covers.html?sizes=${SIZE.w}x${SIZE.h}`, 400, 300);
+  while (!f.contentDocument.title.includes('ready')) await new Promise(r => setTimeout(r, 100));
+  const c = Object.values(f.contentWindow.covers)[0];
+  const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height;
+  copy.getContext('2d').drawImage(c, 0, 0); f.remove();
+  return copy;
+}
+
+(async () => {
+  status('painting the cover…');
+  const cover = DRY ? null : await coverImage();
+  status('booting the game…');
+  const f = await frame('../index.html', SIZE.w, SIZE.h);
+  const win = f.contentWindow;
+  while (!(win.game && win.game.render)) await new Promise(r => setTimeout(r, 50));
+  await win.document.fonts.ready;
+  Object.defineProperty(win, 'devicePixelRatio', { get: () => 1 });   // one canvas pixel per video pixel
+  const d = win.eval('(' + makeDirector + ')')({ seed: +(q.get('seed') || 20260920) });
+
+  const out = document.getElementById('out'); out.width = SIZE.w; out.height = SIZE.h;
+  const ctx = out.getContext('2d');
+  const total = Math.round(SECONDS * FPS), playFrom = Math.round(COVER_HOLD * FPS);
+  window.progress = { frame: 0, total, done: false };
+  for (let i = 0; i < PREROLL * 60; i++) d.tick(1 / 60);     // the slow opening seconds play out underneath the cover
+  for (let n = 0; n < total; n++) {
+    const t = n / FPS;
+    if (n >= playFrom) { d.tick(1 / 60); d.tick(1 / 60); }
+    if (n % FPS === 0) d.sample(t);
+    if (!DRY) {
+      d.render();
+      ctx.globalAlpha = 1; ctx.drawImage(d.canvas, 0, 0, SIZE.w, SIZE.h);
+      const a = 1 - (t - COVER_HOLD) / COVER_FADE;
+      if (a > 0) { ctx.globalAlpha = Math.min(1, a); ctx.drawImage(cover, 0, 0, SIZE.w, SIZE.h); ctx.globalAlpha = 1; }
+      if (POST) {
+        // toDataURL, not toBlob: toBlob encodes in idle time, which a background tab almost never gets
+        const b64 = atob(out.toDataURL('image/jpeg', 0.96).split(',')[1]), bytes = new Uint8Array(b64.length);
+        for (let i = 0; i < b64.length; i++) bytes[i] = b64.charCodeAt(i);
+        await fetch(`${POST}/frame?video=${FORMAT}&n=${n}`, { method: 'POST', body: new Blob([bytes], { type: 'image/jpeg' }) });
+      } else if (n % 2 === 0) await new Promise(r => requestAnimationFrame(r));
+    }
+    window.progress.frame = n + 1;
+    if (n % 15 === 0) status(`frame ${n + 1} / ${total}`);
+  }
+  if (POST && !DRY) {
+    status('encoding…');
+    const res = await fetch(`${POST}/encode?video=${FORMAT}&fps=${FPS}&w=${SIZE.w}&h=${SIZE.h}`, { method: 'POST' }).then(r => r.text());
+    document.getElementById('log').textContent = res + '\n\n';
+  }
+  document.getElementById('log').textContent += d.log.join('\n');
+  window.progress.done = true; window.progress.log = d.log; window.progress.state = d.state();
+  status('done');
+})();
+</script>
+</body>
+</html>

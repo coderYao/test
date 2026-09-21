@@ -16,18 +16,22 @@
 <p>Portal covers painted by the game itself: the real scenery, brush, koi and pickups, composed for each
 aspect ratio, with only the game title on top (CrazyGames allows no other text, borders or logos).
 Serve the repository (<code>python3 tools/serve.py</code>) and open <code>/tools/covers.html</code>.
-Add <code>?seed=1234</code> for different mountains.</p>
+Add <code>?seed=1234</code> for different mountains, <code>?sizes=1920x1080,1080x1620</code> for other sizes.</p>
 <div id="out">Painting…</div>
 
 <script>
 'use strict';
 // CrazyGames cover sizes: landscape 16:9, portrait 2:3, square 1:1
-const COVERS = [
-  { name: 'cover-landscape-1920x1080', w: 1920, h: 1080 },
-  { name: 'cover-portrait-800x1200', w: 800, h: 1200 },
-  { name: 'cover-square-800x800', w: 800, h: 800 },
-];
-const seed = +(new URLSearchParams(location.search).get('seed') || 20260920);
+const params = new URLSearchParams(location.search);
+// ?sizes=1920x1080,1080x1620 paints other sizes (tools/record.html uses this for the videos' opening frame)
+const COVERS = params.get('sizes')
+  ? params.get('sizes').split(',').map(s => s.split('x').map(Number)).map(([w, h]) => ({ name: `cover-${w}x${h}`, w, h }))
+  : [
+    { name: 'cover-landscape-1920x1080', w: 1920, h: 1080 },
+    { name: 'cover-portrait-800x1200', w: 800, h: 1200 },
+    { name: 'cover-square-800x800', w: 800, h: 800 },
+  ];
+const seed = +(params.get('seed') || 20260920);
 
 // Runs inside the game's own page (an off-screen iframe of exactly the cover's size): stage a moment of play.
 function compose(seed) {
