@@ -12,19 +12,24 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 OUT = os.path.join(ROOT, 'dist', 'crazygames')
 ZIP = os.path.join(ROOT, 'dist', 'ink-koi-crazygames.zip')
 SDK = '<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>'
-LIMIT_FILES, LIMIT_TOTAL, LIMIT_INITIAL = 1500, 250 * 2**20, 50 * 2**20  # CrazyGames technical requirements
+LIMIT_FILES, LIMIT_INITIAL = 1500, 50 * 2**20  # CrazyGames limits; the whole game is its initial download
 
 
 def version():
     try:
-        return subprocess.check_output(['git', 'rev-parse', '--short=8', 'HEAD'], cwd=ROOT, text=True).strip()
+        rev = subprocess.check_output(['git', 'rev-parse', '--short=8', 'HEAD'], cwd=ROOT, text=True).strip()
+        dirty = subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=ROOT, text=True).strip()
+        return rev + ('-dirty' if dirty else '')
     except Exception:
         return 'build'
 
 
 def main():
-    shutil.rmtree(OUT, ignore_errors=True)
-    os.makedirs(os.path.join(OUT, 'js'))
+    # empty the folder rather than replacing it, so a dev server already serving it keeps working
+    os.makedirs(OUT, exist_ok=True)
+    for name in os.listdir(OUT):
+        path = os.path.join(OUT, name)
+        shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
     html = open(os.path.join(ROOT, 'index.html'), encoding='utf-8').read()
     if SDK in html or '</head>' not in html:
         sys.exit('index.html: unexpected <head>; refusing to build')
@@ -44,7 +49,7 @@ def main():
 
     files = [os.path.join(d, f) for d, _, fs in os.walk(OUT) for f in fs]
     total = sum(os.path.getsize(f) for f in files)
-    if len(files) > LIMIT_FILES or total > min(LIMIT_TOTAL, LIMIT_INITIAL):
+    if len(files) > LIMIT_FILES or total > LIMIT_INITIAL:
         sys.exit(f'build exceeds CrazyGames limits: {len(files)} files, {total} bytes')
     with zipfile.ZipFile(ZIP, 'w', zipfile.ZIP_DEFLATED) as z:
         for f in sorted(files):

@@ -122,7 +122,9 @@ function paint(cover) {
 
 (async () => {
   const font = document.createElement('link'); font.rel = 'stylesheet';
-  font.href = 'https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap'; document.head.appendChild(font);
+  font.href = 'https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap';
+  // the @font-face rules must be registered before fonts.load() can find the brush face for the title
+  await new Promise(r => { font.onload = font.onerror = r; document.head.appendChild(font); });
   const out = document.getElementById('out'); out.textContent = '';
   window.covers = {};
   for (const c of COVERS) {

@@ -8,15 +8,21 @@ const Platform = (() => {
 
   const call = fn => { if (!sdk) return undefined; try { return fn(sdk); } catch (e) { console.warn('[platform]', e); return undefined; } };
 
-  // never lets a slow or blocked SDK hold the game up
+  // Never lets a slow or blocked SDK hold the game up: we stop waiting after timeoutMs, but still adopt the
+  // SDK if it finishes initialising later, and bring it up to date with what it missed.
   async function init(timeoutMs = 3000) {
     const s = window.CrazyGames && window.CrazyGames.SDK;
     if (!s) return;
-    try {
-      await Promise.race([s.init(), new Promise((_, rej) => setTimeout(() => rej(new Error('SDK init timed out')), timeoutMs))]);
-      if (s.environment !== 'disabled') sdk = s;
-    } catch (e) { console.warn('[platform]', e); }
-    call(k => k.game.addSettingsChangeListener(() => { if (onMute) onMute(muted()); }));
+    const adopt = () => {
+      if (sdk || s.environment === 'disabled') return;
+      sdk = s;
+      call(k => k.game.addSettingsChangeListener(() => { if (onMute) onMute(muted()); }));
+      if (onMute) onMute(muted());
+      if (playing) call(k => k.game.gameplayStart());
+    };
+    const ready = Promise.resolve().then(() => s.init()).then(adopt);
+    ready.catch(e => console.warn('[platform]', e));
+    await Promise.race([ready, new Promise(r => setTimeout(r, timeoutMs))]).catch(() => {});
   }
 
   const muted = () => !!call(k => k.game.settings && k.game.settings.muteAudio);
@@ -28,14 +34,19 @@ const Platform = (() => {
     call(k => p ? k.game.gameplayStart() : k.game.gameplayStop());
   }
 
-  // a break ad between runs. Resolves when the ad is over, failed, was skipped for cooldown, or there is no SDK.
+  // A break ad between runs. Resolves when the ad is over, failed, was skipped for cooldown, or there is no SDK.
+  // Ad flows get blocked and broken in the wild, so a watchdog resolves it anyway: AD_START_MS to begin
+  // (or report an error), AD_MAX_MS to finish once begun. The player is never stranded waiting.
+  const AD_START_MS = 4000, AD_MAX_MS = 120000;
   function midgameAd(onStart, onEnd) {
     return new Promise(resolve => {
       if (!sdk) { resolve(); return; }
-      let done = false;
-      const finish = () => { if (done) return; done = true; if (onEnd) onEnd(); resolve(); };
+      let done = false, timer = 0;
+      const finish = () => { if (done) return; done = true; clearTimeout(timer); if (onEnd) onEnd(); resolve(); };
+      const started = () => { if (done) return; clearTimeout(timer); timer = setTimeout(finish, AD_MAX_MS); if (onStart) onStart(); };
+      timer = setTimeout(finish, AD_START_MS);
       try {
-        sdk.ad.requestAd('midgame', { adStarted: () => { if (onStart) onStart(); }, adFinished: finish, adError: finish });
+        sdk.ad.requestAd('midgame', { adStarted: started, adFinished: finish, adError: finish });
       } catch (e) { console.warn('[platform]', e); finish(); }
     });
   }

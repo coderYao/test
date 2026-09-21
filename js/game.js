@@ -41,7 +41,11 @@ class Game {
     this.reset();
     this.bindInput();
     window.addEventListener('resize', () => this.resize());
-    document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'play') this.paused = true; });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) return;
+      if (this.state === 'play') this.paused = true;
+      Platform.setPlaying(false); // frames stop while hidden, so loop() cannot report this
+    });
     requestAnimationFrame(t => this.loop(t));
   }
 
@@ -84,9 +88,10 @@ class Game {
   start() {
     if (this.adPending) return;
     if (this.state !== 'over') { this.beginRun(); return; }
-    this.adPending = true;
+    const again = document.getElementById('btn-again');
+    this.adPending = true; again.disabled = true;
     Platform.midgameAd(() => Audio.setDucked(true), () => Audio.setDucked(Platform.muted()))
-      .then(() => { this.adPending = false; this.beginRun(); });
+      .then(() => { this.adPending = false; again.disabled = false; this.beginRun(); });
   }
 
   beginRun() {
@@ -149,9 +154,7 @@ class Game {
 
   toggleMute() {
     Audio.init(); Audio.setMuted(!Audio.isMuted());
-    const b = document.getElementById('btn-mute');
-    b.querySelector('.glyph').textContent = Audio.isMuted() ? '默' : '音';
-    b.querySelector('.en').textContent = Audio.isMuted() ? 'Muted' : 'Sound';
+    syncMuteButton();
   }
 
   isWater() { return this.waterHold || this.waterToggle || this.pointer.button === 2; }
@@ -364,6 +367,8 @@ class Game {
   gameOver() {
     this.state = 'over';
     const sc = this.score();
+    // re-read the stored best: if the portal SDK came up late, the account's record may beat the one read at boot
+    this.best = Math.max(this.best, +(Platform.storage.get('moli.best') || 0));
     const newBest = this.best > 0 && sc > this.best;
     this.overT = 0;
     if (newBest) Platform.happytime();
@@ -675,14 +680,27 @@ class Game {
   }
 }
 
+// the 音 / Sound button shows silence from either source: the player's own toggle, or the portal's mute setting
+function syncMuteButton() {
+  const b = document.getElementById('btn-mute'), site = Platform.muted(), off = site || Audio.isMuted();
+  b.querySelector('.glyph').textContent = off ? '默' : '音';
+  b.querySelector('.en').textContent = off ? 'Muted' : 'Sound';
+  b.classList.toggle('site-muted', site);
+  b.title = site ? '已由网站静音 · Muted by the site' : '音 Sound (M)';
+}
+
 window.addEventListener('load', async () => {
+  // fonts and the portal SDK load side by side; neither may hold the game up for long
+  const faces = document.fonts && document.fonts.load
+    ? Promise.all([document.fonts.load('30px "Ma Shan Zheng"'), document.fonts.load('16px "Noto Serif SC"')]).catch(() => {})
+    : Promise.resolve();
+  const fonts = Promise.race([faces, new Promise(r => setTimeout(r, 2500))]); // blocked or slow: fallback faces
   await Platform.init();
   Platform.loadingStart();
-  Audio.setDucked(Platform.muted());
-  Platform.onMuteChange(m => Audio.setDucked(m));
-  const boot = () => { if (window.game instanceof Game) return; window.game = new Game(document.getElementById('game')); Platform.loadingStop(); };
-  if (document.fonts && document.fonts.load) {
-    Promise.all([document.fonts.load('30px "Ma Shan Zheng"'), document.fonts.load('16px "Noto Serif SC"')]).then(boot, boot);
-    setTimeout(boot, 2500); // fonts blocked or slow: start anyway with fallback faces (boot is idempotent)
-  } else boot();
+  const applyMute = m => { Audio.setDucked(m); syncMuteButton(); };
+  applyMute(Platform.muted());
+  Platform.onMuteChange(applyMute);
+  await fonts;
+  try { window.game = new Game(document.getElementById('game')); }
+  finally { Platform.loadingStop(); }
 });
