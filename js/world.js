@@ -12,6 +12,7 @@ class World {
     this.clouds = [];   // {x,y,r,amt,deposited}
     this.tideX = -420;
     this.tideV = 95;
+    this.tidePush = 0; this.tideHold = 0; this.tideSlack = 0; // lotus: the tide ebbs, rests, then returns
   }
 
   difficulty(x) { return clamp(x / 42000, 0, 1); }
@@ -79,8 +80,19 @@ class World {
   updateTide(dt, camX, koiX) {
     const diff = this.difficulty(koiX);
     this.tideV = 95 + diff * 150;
-    this.tideX = Math.max(this.tideX + this.tideV * dt, camX - 30);
+    if (this.tidePush > 0) { const m = Math.min(this.tidePush, 520 * dt); this.tideX -= m; this.tidePush -= m; }
+    else if (this.tideHold > 0) this.tideHold -= dt;
+    else { this.tideX += this.tideV * dt; this.tideSlack = Math.max(0, this.tideSlack - 45 * dt); }
+    this.tideX = Math.max(this.tideX, camX - 30 - this.tideSlack);
   }
+
+  // the tide ebbs by `dist`, rests for `hold` seconds, then creeps back to the edge of the scroll
+  ebbTide(d, hold) {
+    this.tideSlack = Math.min(this.tideSlack + d, d * 2);
+    this.tidePush = Math.min(this.tidePush + d, this.tideSlack);
+    this.tideHold = hold;
+  }
+
 
   hookTip(h, time) {
     const sx = Math.sin(time * 0.9 + h.phase) * h.sway;

@@ -11,6 +11,12 @@ const REASONS = {
   hook: ['为渔翁所获', 'Taken by the fisherman'],
   pool: ['沉入墨潭', 'Sank into the ink pool'],
 };
+const PICKUP = {
+  SURGE: 45, SURGE_PER_COMBO: 10,   // pearl: speed kick (px/s), growing along a 连珠 run
+  PURIFY_R: 260, PURIFY_T: 0.9,     // lotus: radius and spread time of the ring of clear water
+  EBB: 300, EBB_HOLD: 2,            // lotus: how far the ink tide ebbs, and how long it rests there
+};
+const easeOut = k => 1 - Math.pow(1 - clamp(k, 0, 1), 3);
 
 class Game {
   constructor(canvas) {
@@ -26,6 +32,7 @@ class Game {
     this.best = +(localStorage.getItem('moli.best') || 0);
     this.particles = []; this.ripples = []; this.ambient = [];
     this.floaters = [];
+    this.purifies = []; // expanding rings of clear water from a lotus
     this.brushW = 8;
     this.resize();
     this.scenery.makePaper(this.ctx);
@@ -38,7 +45,8 @@ class Game {
 
   resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const W = window.innerWidth, H = window.innerHeight;
+    // a hidden or zero-size frame reports 0x0; lay out for a nominal size until a real resize arrives
+    const W = window.innerWidth || 1280, H = window.innerHeight || 720;
     this.canvas.width = Math.round(W * dpr); this.canvas.height = Math.round(H * dpr);
     this.canvas.style.width = W + 'px'; this.canvas.style.height = H + 'px';
     this.scale = H / LH; this.LW = W / this.scale; this.dpr = dpr;
@@ -59,7 +67,7 @@ class Game {
     this.ink = 1; this.water = 1; this.dry = false;
     this.camX = 0; this.elapsed = 0;
     this.distance = 0; this.pearls = 0; this.lotusN = 0; this.combo = 0; this.comboT = 0;
-    this.particles.length = 0; this.ripples.length = 0; this.floaters.length = 0;
+    this.particles.length = 0; this.ripples.length = 0; this.floaters.length = 0; this.purifies.length = 0;
     this.deathReason = null; this.dyingT = 0;
     this.seasonIdx = 0; this.seasonFlash = 0;
     this.hintT = 0; this.drewOnce = false; this.waterHintT = 0; this.waterHintShown = false;
@@ -226,6 +234,11 @@ class Game {
     this.world.ensure(this.camX, this.camX + W + 900);
     this.world.depositClouds(this.field);
     this.world.prune(this.camX - 600);
+    for (const pf of this.purifies) {
+      pf.t += dt;
+      this.field.wash(pf.x, pf.y, PICKUP.PURIFY_R * easeOut(pf.t / PICKUP.PURIFY_T), 1 - Math.pow(0.7, dt * 60));
+    }
+    this.purifies = this.purifies.filter(pf => pf.t < PICKUP.PURIFY_T + 0.5);
     this.field.step(dt);
     if (this.state === 'play') {
       const events = {
@@ -249,6 +262,9 @@ class Game {
           p.taken = true; this.pearls++; this.ink = Math.min(1, this.ink + 0.3); this.dry = false;
           this.comboT = 1.6; this.combo = Math.min(10, this.combo + 1);
           Audio.pluck(2 + this.combo, 0.45);
+          // 乘势: each pearl is a push, and a run of them is a slingshot
+          koi.surge(PICKUP.SURGE + PICKUP.SURGE_PER_COMBO * this.combo);
+          this.streak(koi, 5 + this.combo);
           this.burst(p.x, p.y, 'rgba(60,64,84,', 8); this.ripples.push({ x: p.x, y: p.y, r: 3, life: 0.5 });
           this.floaters.push({ x: p.x, y: p.y, text: '墨', life: 1, col: 'rgba(40,42,56,' });
         }
@@ -258,6 +274,10 @@ class Game {
         if (dist(l.x, l.y, koi.x, koi.y) < 24) {
           l.taken = true; this.lotusN++; koi.vitality = 1; koi.mud = 0; this.water = Math.min(1, this.water + 0.5); this.ink = Math.min(1, this.ink + 0.2);
           Audio.chord(5, 0.4);
+          // 出淤泥而不染: clear water spreads from the lotus, and the ink tide ebbs
+          this.purifies.push({ x: l.x, y: l.y, t: 0 });
+          this.world.ebbTide(PICKUP.EBB, PICKUP.EBB_HOLD);
+          this.floaters.push({ x: l.x, y: l.y + 30, text: '潮退', life: 1.6, col: 'rgba(70,96,120,' });
           this.burst(l.x, l.y, 'rgba(212,82,96,', 14); this.ripples.push({ x: l.x, y: l.y, r: 6, life: 0.8 });
           this.floaters.push({ x: l.x, y: l.y, text: '莲', life: 1.2, col: 'rgba(200,70,90,' });
         }
@@ -349,6 +369,15 @@ class Game {
       this.particles.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: 0.5 + Math.random() * 0.5, r: 1 + Math.random() * 2.6, col, g: 500 });
     }
   }
+  // ink flung back off the koi's tail as it surges
+  streak(koi, n) {
+    const hx = Math.cos(koi.heading), hy = Math.sin(koi.heading);
+    for (let i = 0; i < n; i++) {
+      const v = 120 + Math.random() * 200, side = (Math.random() - 0.5) * 70;
+      this.particles.push({ x: koi.x - hx * 10, y: koi.y - hy * 10, vx: -hx * v - hy * side, vy: -hy * v + hx * side, life: 0.35 + Math.random() * 0.3, r: 1 + Math.random() * 1.8, col: 'rgba(40,44,60,', g: 40 });
+    }
+  }
+
   burst(x, y, col, n) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * TAU, v = 60 + Math.random() * 120;
@@ -398,6 +427,26 @@ class Game {
     // ripples
     ctx.save(); ctx.translate(-cam, 0);
     for (const r of this.ripples) { ctx.strokeStyle = `rgba(40,44,60,${r.life * 0.5})`; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(r.x, r.y, r.r, r.r * 0.55, 0, 0, TAU); ctx.stroke(); }
+    for (const pf of this.purifies) {
+      const k = clamp(pf.t / PICKUP.PURIFY_T, 0, 1), r = PICKUP.PURIFY_R * easeOut(k);
+      const a = 1 - smoothstep(0.55, 1, pf.t / (PICKUP.PURIFY_T + 0.5));
+      // a wet, pale wash with a brighter rim, and a second ring trailing behind it
+      const g = ctx.createRadialGradient(pf.x, pf.y, r * 0.55, pf.x, pf.y, r);
+      g.addColorStop(0, 'rgba(150,182,196,0)'); g.addColorStop(0.85, `rgba(150,182,196,${0.2 * a})`); g.addColorStop(1, 'rgba(150,182,196,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(pf.x, pf.y, r, 0, TAU); ctx.fill();
+      // rims wobble like water creeping across paper, not compass circles
+      const rim = (rr, seed) => {
+        ctx.beginPath();
+        for (let i = 0; i <= 48; i++) {
+          const ang = i / 48 * TAU, c = Math.cos(ang), sn = Math.sin(ang);
+          const q = rr * (1 + (fbm(c * 1.3 + seed, sn * 1.3 + pf.t * 0.8, 2, 3) - 0.5) * 0.12);
+          if (i) ctx.lineTo(pf.x + c * q, pf.y + sn * q); else ctx.moveTo(pf.x + c * q, pf.y + sn * q);
+        }
+        ctx.closePath(); ctx.stroke();
+      };
+      ctx.strokeStyle = `rgba(86,120,140,${0.5 * a})`; ctx.lineWidth = 1.6; rim(r * 0.97, 3);
+      ctx.strokeStyle = `rgba(200,70,90,${0.35 * a})`; ctx.lineWidth = 1; rim(r * 0.7, 11);
+    }
     ctx.restore();
     this.koi.draw(ctx, cam);
     // particles

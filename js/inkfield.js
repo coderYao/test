@@ -71,6 +71,21 @@ class InkField {
   }
 
   // water brush: removes ink under the brush and pushes a share of it outward as thin mist
+  // lotus purification: fade ink inside r, soft at the rim; nothing is displaced
+  wash(wx, wy, r, strength) {
+    const c = this.c, cols = this.cols, rows = this.rows, d = this.d;
+    const c0 = Math.max(0, Math.floor((wx - r - this.ox) / c)), c1 = Math.min(cols - 1, Math.ceil((wx + r - this.ox) / c));
+    const r0 = Math.max(0, Math.floor((wy - r) / c)), r1 = Math.min(rows - 1, Math.ceil((wy + r) / c));
+    for (let row = r0; row <= r1; row++) {
+      const py = (row + 0.5) * c - wy;
+      for (let col = c0; col <= c1; col++) {
+        const px = (col + 0.5) * c + this.ox - wx;
+        const dd = Math.sqrt(px * px + py * py);
+        if (dd < r) d[row * cols + col] *= 1 - strength * Math.min(1, (r - dd) / 40);
+      }
+    }
+  }
+
   water(wx, wy, r, strength) {
     const c = this.c, cols = this.cols, rows = this.rows, d = this.d;
     const R = r * 1.9;
