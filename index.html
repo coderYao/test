@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -18,44 +18,56 @@
     <div class="seal">墨</div>
     <h1>墨鲤</h1>
     <h2>Ink Koi</h2>
-    <p class="lead">笔落成流，鲤随墨行。<br><span class="en">Where the brush falls, water flows; the koi follows the ink.</span></p>
+    <p class="lead"><span class="zh">笔落成流，鲤随墨行。</span><span class="en">Where the brush falls, water flows; the koi follows the ink.</span></p>
     <ul class="how">
-      <li><b>拖动</b> 画一笔，锦鲤会顺着你的墨迹游动。<span class="en">Drag to paint a stroke; the koi rides it like a current.</span></li>
-      <li><b>新墨夺流</b>：在鱼身上再画一笔，它便改随新墨。<span class="en">Paint a fresh stroke across the koi and it switches to the new current.</span></li>
-      <li><b>慢笔浓墨</b>，粗而耐久；<b>疾笔飞白</b>，细而省墨。<span class="en">Slow strokes are thick and last; fast strokes are thin, dry, and cheap.</span></li>
-      <li><b>墨会干</b>，砚台慢慢回墨；墨珠补墨，连珠乘势疾游。<span class="en">Ink refills slowly. Pearls top it up and surge the koi forward, harder in a run.</span></li>
-      <li><b>浓墨伤鱼</b>：按住 <kbd>Shift</kbd>、右键拖动，或点「水」，以清水化开。<span class="en">Thick ink hurts the koi: hold Shift, right-drag, or tap 水 to wash it away.</span></li>
-      <li>躲开渔翁的钩，别被身后的墨潮追上。<span class="en">Dodge the fisherman's hooks, and outrun the ink tide.</span></li>
-      <li><b>莲</b> 出淤泥而不染：净化四周浓墨，墨潮暂退。<span class="en">A lotus heals the koi, washes the ink around it clean, and makes the tide ebb.</span></li>
+      <li><span class="zh"><b>拖动</b>画一笔，锦鲤会顺着你的墨迹游动。</span><span class="en"><b>Drag</b> to paint a stroke. The koi rides it like a current.</span></li>
+      <li><span class="zh"><b>新墨夺流</b>：在鱼身上再画一笔，它便改随新墨。</span><span class="en"><b>Fresh ink takes over.</b> Paint across the koi and it switches to the new stroke.</span></li>
+      <li><span class="zh"><b>慢笔浓墨</b>，粗而耐久；<b>疾笔飞白</b>，细而省墨。</span><span class="en"><b>Slow strokes</b> are thick and last. <b>Fast strokes</b> are thin, dry and cheap.</span></li>
+      <li><span class="zh"><b>墨会干</b>，砚台慢慢回墨；墨珠补墨，连珠乘势疾游。</span><span class="en"><b>Ink runs out</b> and refills slowly. <b>Pearls</b> refill it and surge the koi forward.</span></li>
+      <li><span class="zh"><b>浓墨伤鱼</b>：按住 <kbd>Shift</kbd>、右键拖动，或点「水」，以清水化开。</span><span class="en"><b>Thick ink hurts the koi.</b> Hold <kbd>Shift</kbd>, right-drag, or tap 水 to wash it away.</span></li>
+      <li><span class="zh"><b>莲</b>出淤泥而不染：净化四周浓墨，墨潮暂退。</span><span class="en"><b>A lotus</b> heals the koi, washes nearby ink clean, and makes the tide ebb.</span></li>
+      <li><span class="zh">躲开渔翁的<b>钩</b>，别被身后的<b>墨潮</b>追上。</span><span class="en">Dodge the fisherman's <b>hooks</b>, and outrun the <b>ink tide</b> behind you.</span></li>
     </ul>
-    <p class="cta">点击任意处开始 · Click anywhere to begin</p>
+    <p class="cta"><span class="zh">点击任意处开始</span><span class="en">Click anywhere to begin</span></p>
   </div>
 </div>
 
 <div id="over" class="overlay hidden">
-  <div class="panel">
+  <div class="panel over-panel">
+    <div class="seal" id="over-seal">墨</div>
     <h1 class="small" id="over-reason">鱼化墨</h1>
-    <p class="en" id="over-reason-en"></p>
-    <div class="score"><span id="over-score">0</span></div>
-    <p class="stats">行 <b id="over-dist">0</b> 丈 · 墨珠 <b id="over-pearls">0</b> · 莲 <b id="over-lotus">0</b> · 最远 <b id="over-best">0</b></p>
-    <button id="btn-again">再游一次 · Again</button>
+    <p class="en reason" id="over-reason-en"></p>
+    <p class="tip"><span class="zh" id="over-tip"></span><span class="en" id="over-tip-en"></span></p>
+    <div class="scorebox">
+      <div class="score" id="over-score">0</div>
+      <div class="score-label">得分 <span class="en">Score</span></div>
+      <div class="newbest" id="over-newbest">新纪录 <span class="en">New best</span></div>
+    </div>
+    <dl class="stats">
+      <div><dd id="over-dist">0</dd><dt>行 · 丈<span class="en">Distance</span></dt></div>
+      <div><dd id="over-pearls">0</dd><dt>墨珠<span class="en">Pearls</span></dt></div>
+      <div><dd id="over-lotus">0</dd><dt>莲<span class="en">Lotus</span></dt></div>
+      <div><dd id="over-best">0</dd><dt>最远<span class="en">Best</span></dt></div>
+    </dl>
+    <button id="btn-again">再游一次 <span class="en">Swim again</span></button>
+    <p class="keys">或按 <kbd>Enter</kbd> / <kbd>R</kbd> <span class="en">or press Enter / R</span></p>
   </div>
 </div>
 
-<div id="rotate"><div><span class="big">橫</span><br>请横屏游玩<br><span class="en">Rotate your device to landscape</span></div></div>
+<div id="rotate"><div><span class="big">橫</span><br>请横屏游玩<span class="en">Rotate your device to landscape</span></div></div>
 
 <div id="controls">
-  <button id="btn-water" title="水 / 墨 (Shift)">水</button>
-  <button id="btn-mute" title="mute (M)">音</button>
+  <button id="btn-water" title="水 Water brush (Shift)"><span class="glyph">水</span><span class="en">Water</span></button>
+  <button id="btn-mute" title="音 Sound (M)"><span class="glyph">音</span><span class="en">Sound</span></button>
 </div>
 
-<script src="js/util.js"></script>
-<script src="js/audio.js"></script>
-<script src="js/inkfield.js"></script>
-<script src="js/brush.js"></script>
-<script src="js/koi.js"></script>
-<script src="js/scenery.js"></script>
-<script src="js/world.js"></script>
-<script src="js/game.js"></script>
+<script src="js/util.js?v=4"></script>
+<script src="js/audio.js?v=4"></script>
+<script src="js/inkfield.js?v=4"></script>
+<script src="js/brush.js?v=4"></script>
+<script src="js/koi.js?v=4"></script>
+<script src="js/scenery.js?v=4"></script>
+<script src="js/world.js?v=4"></script>
+<script src="js/game.js?v=4"></script>
 </body>
 </html>

@@ -5,11 +5,13 @@ const CELL = 10;
 const FONT_BRUSH = '"Ma Shan Zheng", "Zhi Mang Xing", "KaiTi", "STKaiti", "Noto Serif SC", serif';
 const FONT_TEXT = '"Noto Serif SC", "Songti SC", "SimSun", serif';
 const POEMS = ['春水初生', '夏荷听雨', '秋叶染霜', '冬雪归寂'];
+const POEMS_EN = ['Spring waters rise', 'Summer lotus, listening to rain', 'Autumn leaves, touched by frost', 'Winter snow, returning to stillness'];
+// cause of death: [Chinese, English, seal glyph, tip (Chinese), tip (English)]
 const REASONS = {
-  tide: ['被墨潮吞没', 'Swallowed by the ink tide'],
-  ink: ['溺于浓墨', 'Drowned in thick ink'],
-  hook: ['为渔翁所获', 'Taken by the fisherman'],
-  pool: ['沉入墨潭', 'Sank into the ink pool'],
+  tide: ['被墨潮吞没', 'Swallowed by the ink tide', '潮', '墨潮不等鱼，顺势而下方能疾游。', 'The tide never waits. Paint downhill strokes to build speed.'],
+  ink: ['溺于浓墨', 'Drowned in thick ink', '墨', '浓墨伤神：以清水化开，或绕行留白。', 'Thick ink drains Spirit. Wash it away with water, or steer through blank paper.'],
+  hook: ['为渔翁所获', 'Taken by the fisherman', '钩', '钩自天降，俯身从下方游过。', 'Hooks hang from above. Dive under them.'],
+  pool: ['沉入墨潭', 'Sank into the ink pool', '潭', '鱼离墨则沉：笔要落在鱼的前下方。', 'Off the ink, the koi sinks. Keep a stroke just ahead of it and below.'],
 };
 const PICKUP = {
   SURGE: 45, SURGE_PER_COMBO: 10,   // pearl: speed kick (px/s), growing along a 连珠 run
@@ -138,7 +140,9 @@ class Game {
 
   toggleMute() {
     Audio.init(); Audio.setMuted(!Audio.isMuted());
-    document.getElementById('btn-mute').textContent = Audio.isMuted() ? '默' : '音';
+    const b = document.getElementById('btn-mute');
+    b.querySelector('.glyph').textContent = Audio.isMuted() ? '默' : '音';
+    b.querySelector('.en').textContent = Audio.isMuted() ? 'Muted' : 'Sound';
   }
 
   isWater() { return this.waterHold || this.waterToggle || this.pointer.button === 2; }
@@ -266,7 +270,7 @@ class Game {
           koi.surge(PICKUP.SURGE + PICKUP.SURGE_PER_COMBO * this.combo);
           this.streak(koi, 5 + this.combo);
           this.burst(p.x, p.y, 'rgba(60,64,84,', 8); this.ripples.push({ x: p.x, y: p.y, r: 3, life: 0.5 });
-          this.floaters.push({ x: p.x, y: p.y, text: '墨', life: 1, col: 'rgba(40,42,56,' });
+          this.floaters.push({ x: p.x, y: p.y, text: '墨', en: this.combo > 1 ? 'surge' : 'ink', life: 1, col: 'rgba(40,42,56,' });
         }
       }
       for (const l of this.world.lotus) {
@@ -277,9 +281,8 @@ class Game {
           // 出淤泥而不染: clear water spreads from the lotus, and the ink tide ebbs
           this.purifies.push({ x: l.x, y: l.y, t: 0 });
           this.world.ebbTide(PICKUP.EBB, PICKUP.EBB_HOLD);
-          this.floaters.push({ x: l.x, y: l.y + 30, text: '潮退', life: 1.6, col: 'rgba(70,96,120,' });
           this.burst(l.x, l.y, 'rgba(212,82,96,', 14); this.ripples.push({ x: l.x, y: l.y, r: 6, life: 0.8 });
-          this.floaters.push({ x: l.x, y: l.y, text: '莲', life: 1.2, col: 'rgba(200,70,90,' });
+          this.floaters.push({ x: l.x, y: l.y - 30, text: '莲净 · 潮退', en: 'purified · the tide ebbs', life: 1.8, col: 'rgba(190,60,80,' });
         }
       }
       this.comboT -= dt; if (this.comboT <= 0) this.combo = 0;
@@ -350,10 +353,15 @@ class Game {
   gameOver() {
     this.state = 'over';
     const sc = this.score();
+    const newBest = sc > this.best && sc > 0;
     if (sc > this.best) { this.best = sc; localStorage.setItem('moli.best', String(sc)); }
     const r = REASONS[this.deathReason] || REASONS.ink;
     document.getElementById('over-reason').textContent = r[0];
     document.getElementById('over-reason-en').textContent = r[1];
+    document.getElementById('over-seal').textContent = r[2];
+    document.getElementById('over-tip').textContent = r[3];
+    document.getElementById('over-tip-en').textContent = r[4];
+    document.getElementById('over-newbest').classList.toggle('on', newBest);
     document.getElementById('over-score').textContent = sc;
     document.getElementById('over-dist').textContent = Math.floor(this.distance / 10);
     document.getElementById('over-pearls').textContent = this.pearls;
@@ -452,7 +460,10 @@ class Game {
     // particles
     ctx.save(); ctx.translate(-cam, 0);
     for (const p of this.particles) { ctx.fillStyle = p.col + Math.min(1, p.life * 1.6) + ')'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill(); }
-    for (const f of this.floaters) { ctx.font = `22px ${FONT_BRUSH}`; ctx.fillStyle = f.col + Math.min(1, f.life) + ')'; ctx.textAlign = 'center'; ctx.fillText(f.text, f.x, f.y); }
+    for (const f of this.floaters) {
+      ctx.font = `22px ${FONT_BRUSH}`; ctx.fillStyle = f.col + Math.min(1, f.life) + ')'; ctx.textAlign = 'center'; ctx.fillText(f.text, f.x, f.y);
+      if (f.en) { ctx.font = `600 14px ${FONT_TEXT}`; ctx.fillText(f.en, f.x, f.y + 17); }
+    }
     ctx.restore();
     this.world.drawTide(ctx, cam, W, H, t);
     this.drawAmbient(ctx);
@@ -465,14 +476,15 @@ class Game {
       ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
     }
     if (this.state === 'title') { this.drawInscription(ctx, W, H, 0.6); return; }
-    this.drawHUD(ctx, W, H);
+    if (this.state !== 'over') this.drawHUD(ctx, W, H);
     this.drawInscription(ctx, W, H, 1);
     this.drawHints(ctx, W, H);
     this.drawCursor(ctx);
     if (this.paused) {
       ctx.fillStyle = 'rgba(241,234,219,0.55)'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = 'rgba(30,30,40,0.9)'; ctx.font = `64px ${FONT_BRUSH}`; ctx.textAlign = 'center'; ctx.fillText('小憩', W / 2, H / 2);
-      ctx.font = `18px ${FONT_TEXT}`; ctx.fillText('Paused · click to resume', W / 2, H / 2 + 40);
+      ctx.font = `600 26px ${FONT_TEXT}`; ctx.fillText('Paused', W / 2, H / 2 + 44);
+      ctx.font = `18px ${FONT_TEXT}`; ctx.fillText('点击继续 · click to resume', W / 2, H / 2 + 74);
     }
   }
 
@@ -501,7 +513,7 @@ class Game {
     g.addColorStop(0, 'rgba(60,64,80,1)'); g.addColorStop(1, 'rgba(10,10,16,1)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(ix, iy, 34 * Math.max(0.12, lvl), 20 * Math.max(0.12, lvl), 0, 0, TAU); ctx.fill();
     ctx.fillStyle = 'rgba(240,236,224,0.6)'; ctx.beginPath(); ctx.ellipse(ix - 10 * lvl, iy - 7 * lvl, 5 * lvl + 1, 2.5 * lvl + 0.5, -0.4, 0, TAU); ctx.fill();
-    ctx.fillStyle = 'rgba(30,30,40,0.85)'; ctx.font = `20px ${FONT_BRUSH}`; ctx.textAlign = 'center'; ctx.fillText('墨', ix, iy + 52);
+    this.label(ctx, '墨', 'Ink', ix - 6, iy + 54);
     // water bowl
     const wx = 150, wy = 58;
     ctx.strokeStyle = this.flashWater > 0 ? `rgba(200,60,50,${this.flashWater})` : 'rgba(30,30,40,0.7)'; ctx.lineWidth = 1.6;
@@ -513,7 +525,7 @@ class Game {
     for (let x = -40; x <= 40; x += 8) ctx.lineTo(wx + x, wl + Math.sin(x * 0.2 + this.time * 3) * 1.5);
     ctx.lineTo(wx + 40, wy + 40); ctx.lineTo(wx - 40, wy + 40); ctx.closePath(); ctx.fill();
     ctx.restore();
-    ctx.fillStyle = 'rgba(30,30,40,0.85)'; ctx.font = `20px ${FONT_BRUSH}`; ctx.fillText('水', wx, wy + 52);
+    this.label(ctx, '水', 'Water', wx + 16, wy + 54);
     if (this.isWater()) { ctx.strokeStyle = 'rgba(110,130,160,0.9)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(wx, wy + 4, 33, 27, 0, 0, TAU); ctx.stroke(); }
     // vitality: a vermilion line
     const v = clamp(this.koi.vitality, 0, 1);
@@ -521,16 +533,44 @@ class Game {
     ctx.beginPath(); ctx.moveTo(24, 128); ctx.lineTo(180, 128); ctx.stroke();
     ctx.strokeStyle = `rgba(${lerp(60, 214, v)},${lerp(60, 78, v)},${lerp(70, 40, v)},0.9)`; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(24, 128); ctx.lineTo(24 + 156 * v, 128); ctx.stroke();
-    ctx.fillStyle = 'rgba(30,30,40,0.85)'; ctx.font = `15px ${FONT_BRUSH}`; ctx.textAlign = 'left'; ctx.fillText('神', 186, 133);
+    ctx.fillStyle = 'rgba(30,30,40,0.85)'; ctx.fillStyle = 'rgba(30,30,40,0.92)'; ctx.font = `20px ${FONT_BRUSH}`; ctx.textAlign = 'left'; ctx.fillText('神', 188, 135);
+    ctx.font = `600 17px ${FONT_TEXT}`; ctx.fillText('Spirit', 212, 134);
     // score
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(30,30,40,0.9)'; ctx.font = `44px ${FONT_BRUSH}`;
     ctx.fillText(String(this.score()), W - 110, 62);
-    ctx.font = `15px ${FONT_TEXT}`; ctx.fillStyle = 'rgba(30,30,40,0.7)';
-    ctx.fillText(`行 ${Math.floor(this.distance / 10)} 丈 · 墨珠 ${this.pearls}`, W - 110, 86);
-    if (this.best > 0) ctx.fillText(`最远 ${this.best}`, W - 110, 106);
-    if (this.combo > 1) { ctx.fillStyle = `rgba(200,60,50,${clamp(this.comboT, 0, 1)})`; ctx.font = `22px ${FONT_BRUSH}`; ctx.fillText(`连珠 ×${this.combo}`, W - 110, 132); }
+    // labelled rows: brush glyphs, then the English, then the value
+    const row = (zh, en, val, y) => {
+      ctx.fillStyle = 'rgba(30,30,40,0.92)';
+      ctx.font = `600 17px ${FONT_TEXT}`; ctx.fillText(val, W - 110, y);
+      const ex = val ? W - 120 - ctx.measureText(val).width : W - 110;
+      ctx.fillStyle = 'rgba(30,30,40,0.8)';
+      ctx.font = `600 16px ${FONT_TEXT}`; ctx.fillText(en, ex, y);
+      const ew = ctx.measureText(en).width;
+      ctx.font = `19px ${FONT_BRUSH}`; ctx.fillText(zh, ex - 6 - ew, y + 1);
+    };
+    row('得分', 'Score', '', 84);
+    row('行', 'Distance', `${Math.floor(this.distance / 10)} 丈`, 110);
+    row('墨珠', 'Pearls', String(this.pearls), 132);
+    if (this.best > 0) row('最远', 'Best', String(this.best), 154);
+    if (this.combo > 1) {
+      ctx.fillStyle = `rgba(200,60,50,${clamp(this.comboT, 0, 1)})`;
+      ctx.font = `600 18px ${FONT_TEXT}`; ctx.fillText(`Combo ×${this.combo}`, W - 110, 183);
+      const cw = ctx.measureText(`Combo ×${this.combo}`).width;
+      ctx.font = `24px ${FONT_BRUSH}`; ctx.fillText('连珠', W - 118 - cw, 184);
+    }
     ctx.restore();
+  }
+
+  // a HUD label: brush glyph with its English beside it, centred as a pair on x
+  label(ctx, zh, en, x, y) {
+    ctx.fillStyle = 'rgba(30,30,40,0.92)';
+    ctx.font = `600 17px ${FONT_TEXT}`; const ew = ctx.measureText(en).width;
+    ctx.font = `22px ${FONT_BRUSH}`; const zw = ctx.measureText(zh).width;
+    const x0 = x - (zw + 6 + ew) / 2;
+    ctx.textAlign = 'left'; ctx.fillText(zh, x0, y);
+    ctx.font = `600 17px ${FONT_TEXT}`; ctx.fillText(en, x0 + zw + 6, y - 1);
+    ctx.textAlign = 'center';
   }
 
   drawInscription(ctx, W, H, alpha) {
@@ -545,6 +585,10 @@ class Game {
     ctx.font = `16px ${FONT_BRUSH}`;
     const sub = '墨鲤';
     for (let i = 0; i < sub.length; i++) ctx.fillText(sub[i], x, y0 + poem.length * 36 + 12 + i * 20);
+    ctx.save(); ctx.translate(x - 36, y0 - 22); ctx.rotate(Math.PI / 2);
+    ctx.font = `14px ${FONT_TEXT}`; ctx.textAlign = 'left'; ctx.fillText(POEMS_EN[si], 0, 0);
+    ctx.restore();
+    ctx.textAlign = 'center';
     // seal
     const sy = y0 + poem.length * 36 + 12 + sub.length * 20 + 8;
     ctx.fillStyle = 'rgba(190,50,40,0.85)';
@@ -558,7 +602,8 @@ class Game {
       ctx.save(); ctx.globalAlpha = a;
       ctx.fillStyle = 'rgba(30,30,40,0.9)'; ctx.font = `72px ${FONT_BRUSH}`; ctx.textAlign = 'center';
       ctx.fillText(SEASONS[si].name, W / 2, H * 0.4);
-      ctx.font = `20px ${FONT_TEXT}`; ctx.fillText(SEASONS[si].en + ' · ' + POEMS[si], W / 2, H * 0.4 + 40);
+      ctx.font = `600 34px ${FONT_TEXT}`; ctx.fillText(SEASONS[si].en, W / 2, H * 0.4 + 48);
+      ctx.font = `20px ${FONT_TEXT}`; ctx.fillText(POEMS[si] + ' · ' + POEMS_EN[si], W / 2, H * 0.4 + 82);
       ctx.restore();
     }
   }
@@ -569,13 +614,13 @@ class Game {
       const a = 0.6 + 0.4 * Math.sin(this.time * 3);
       ctx.fillStyle = `rgba(30,30,40,${a})`; ctx.font = `26px ${FONT_BRUSH}`;
       ctx.fillText('画一笔，锦鲤便顺着墨流而去', W / 2, H * 0.22);
-      ctx.font = `16px ${FONT_TEXT}`; ctx.fillText('Draw a stroke — the koi rides your ink as a current', W / 2, H * 0.22 + 30);
+      ctx.font = `600 21px ${FONT_TEXT}`; ctx.fillText('Draw a stroke. The koi rides your ink as a current.', W / 2, H * 0.22 + 34);
     }
     if (this.waterHintT > 0) {
       const a = Math.min(1, this.waterHintT);
       ctx.fillStyle = `rgba(30,30,40,${a})`; ctx.font = `24px ${FONT_BRUSH}`;
       ctx.fillText('浓墨伤鱼 · 按住 Shift 以清水化开', W / 2, H * 0.22);
-      ctx.font = `15px ${FONT_TEXT}`; ctx.fillText('Thick ink hurts the koi — hold Shift (or right-drag / 水 button) to wash it away with water', W / 2, H * 0.22 + 28);
+      ctx.font = `600 20px ${FONT_TEXT}`; ctx.fillText('Thick ink hurts the koi. Hold Shift, right-drag, or tap 水 to wash it away.', W / 2, H * 0.22 + 32);
     }
     ctx.restore();
   }

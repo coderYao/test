@@ -6,6 +6,8 @@ You hold a brush. A vermilion koi swims through an endless hand-painted scroll o
 
 **Play:** open `index.html` in a browser, or serve the folder (`python3 -m http.server`) and visit it. No build step, no dependencies. Works with mouse, trackpad, pen and touch.
 
+The game is bilingual throughout: every piece of text, from the title card to HUD labels, pickup floaters, season poems and the game-over screen, pairs the Chinese with English at a readable size, on phones as well as desktop.
+
 ## How to play
 
 | Action | Mouse / keyboard | Touch |
