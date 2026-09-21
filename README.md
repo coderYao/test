@@ -51,6 +51,7 @@ See `docs/DESIGN.md` for the brainstorm of ten concepts and why this one won.
 index.html      markup, overlays, script order
 style.css       overlay and button styling
 js/util.js      math, seeded RNG, value and ridged noise
+js/platform.js  portal adapter: CrazyGames SDK when present, no-ops otherwise
 js/audio.js     procedural sound
 js/inkfield.js  ink density field (hazards, diffusion, water brush)
 js/brush.js     strokes: sampling, arc-length rails, ink-wash rendering
@@ -58,7 +59,12 @@ js/koi.js       koi physics on currents, painterly rendering
 js/scenery.js   paper, mountains, decorations, seasons
 js/world.js     procedural chunks, pickups, hooks, the tide
 js/game.js      loop, input, HUD, particles, states
+tools/serve.py             no-cache dev server
+tools/build_crazygames.py  packages dist/ink-koi-crazygames.zip for the CrazyGames portal
+tools/covers.html          paints the portal cover images with the game's own code
 ```
+
+Publishing on CrazyGames: see [`docs/CRAZYGAMES.md`](docs/CRAZYGAMES.md).
 
 ---
 

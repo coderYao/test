@@ -31,7 +31,7 @@ class Game {
     this.pointer = { x: 0, y: 0, down: false, type: 'mouse', sx: 0, sy: 0, ts: 0, inside: false };
     this.waterHold = false; this.waterToggle = false;
     this.paused = false;
-    this.best = +(localStorage.getItem('moli.best') || 0);
+    this.best = +(Platform.storage.get('moli.best') || 0);
     this.particles = []; this.ripples = []; this.ambient = [];
     this.floaters = [];
     this.purifies = []; // expanding rings of clear water from a lotus
@@ -80,7 +80,16 @@ class Game {
     this.field.shiftTo(-150);
   }
 
+  // begin a run. Restarting after a death is a natural break, so that is where the portal may show an ad.
   start() {
+    if (this.adPending) return;
+    if (this.state !== 'over') { this.beginRun(); return; }
+    this.adPending = true;
+    Platform.midgameAd(() => Audio.setDucked(true), () => Audio.setDucked(Platform.muted()))
+      .then(() => { this.adPending = false; this.beginRun(); });
+  }
+
+  beginRun() {
     this.reset();
     this.state = 'play'; this.paused = false;
     document.getElementById('title').classList.add('hidden');
@@ -197,6 +206,7 @@ class Game {
     requestAnimationFrame(t => this.loop(t));
     let dt = (now - this.last) / 1000; this.last = now;
     if (dt > 0.05) dt = 0.05;
+    Platform.setPlaying(this.state === 'play' && !this.paused && !this.adPending);
     if (!this.paused && this.state !== 'title') this.update(dt);
     else if (this.state === 'title') this.updateTitle(dt);
     this.render();
@@ -356,7 +366,8 @@ class Game {
     const sc = this.score();
     const newBest = this.best > 0 && sc > this.best;
     this.overT = 0;
-    if (sc > this.best) { this.best = sc; localStorage.setItem('moli.best', String(sc)); }
+    if (newBest) Platform.happytime();
+    if (sc > this.best) { this.best = sc; Platform.storage.set('moli.best', String(sc)); }
     const r = REASONS[this.deathReason] || REASONS.ink;
     document.getElementById('over-reason').textContent = r[0];
     document.getElementById('over-reason-en').textContent = r[1];
@@ -664,10 +675,14 @@ class Game {
   }
 }
 
-window.addEventListener('load', () => {
-  const boot = () => { window.game = new Game(document.getElementById('game')); };
+window.addEventListener('load', async () => {
+  await Platform.init();
+  Platform.loadingStart();
+  Audio.setDucked(Platform.muted());
+  Platform.onMuteChange(m => Audio.setDucked(m));
+  const boot = () => { if (window.game instanceof Game) return; window.game = new Game(document.getElementById('game')); Platform.loadingStop(); };
   if (document.fonts && document.fonts.load) {
     Promise.all([document.fonts.load('30px "Ma Shan Zheng"'), document.fonts.load('16px "Noto Serif SC"')]).then(boot, boot);
-    setTimeout(() => { if (!window.game) boot(); }, 2500);
+    setTimeout(boot, 2500); // fonts blocked or slow: start anyway with fallback faces (boot is idempotent)
   } else boot();
 });
