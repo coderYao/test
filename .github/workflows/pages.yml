@@ -23,6 +23,8 @@ jobs:
           node-version: 22
       - name: Validate holes
         run: node perigee/tools/validate.mjs
+      - name: Stamp asset versions with the commit
+        run: sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
