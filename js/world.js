@@ -34,15 +34,14 @@ class World {
     const diff = this.difficulty(x0);
     if (i < 1) return;                      // calm start
     // a dragon gate falls in this chunk? Then keep the air around it clear, and lead into it with pearls
-    let gateX = null;
     const k = Math.ceil((x0 - GATE.FIRST) / GATE.EVERY), gx = GATE.FIRST + Math.max(0, k) * GATE.EVERY;
     if (gx >= x0 && gx < x0 + CHUNK) {
-      gateX = gx;
       const gy = 220 + rng() * 260;
       this.rings.push({ x: gx, y: gy, r: GATE.R, gate: true, n: Math.round((gx - GATE.FIRST) / GATE.EVERY) + 1, taken: false, missed: false, t: rng() * TAU, fx: 0 });
       for (let p = 0; p < 4; p++) this.pearls.push({ x: gx - 230 + p * 44, y: gy + Math.sin(p * 0.9) * 20, taken: false, t: rng() * TAU });
     }
-    const clear = x => gateX === null || Math.abs(x - gateX) > 240;
+    // gates sit at a fixed spacing, so every chunk can keep clear of the nearest one, including a gate in the next chunk
+    const clear = (x, reach = 0) => Math.abs(x - (GATE.FIRST + Math.max(0, Math.round((x - GATE.FIRST) / GATE.EVERY)) * GATE.EVERY)) > 240 + reach;
     // ink clouds
     if (i >= 2) {
       const n = Math.floor(0.6 + diff * 3.2 + rng() * 1.6);
@@ -50,7 +49,7 @@ class World {
         const cx = x0 + 80 + rng() * (CHUNK - 160), cy = 120 + rng() * 440;
         const r = 34 + rng() * (36 + diff * 50);
         const sub = 2 + (rng() * 4 | 0);
-        if (!clear(cx)) continue;
+        if (!clear(cx, r * 2.1)) continue; // a cloud's ink reaches about 2r from its centre once its blobs spread
         for (let s = 0; s < sub; s++) {
           const a = rng() * TAU, d = rng() * r * 0.8;
           this.clouds.push({ x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d, r: r * (0.45 + rng() * 0.5), amt: 0.75 + rng() * 0.45, deposited: false });
