@@ -42,6 +42,8 @@ class Stroke {
     this.bleed = null;   // soft halo of ink soaking into the paper, grows in as the stroke dries
     this.bx0 = 1e9; this.by0 = 1e9; this.bx1 = -1e9; this.by1 = -1e9;
     this.wsum = 0;
+    this.ver = 0;        // bumped whenever the points change
+    this.live = null;    // surfaces for painting the stroke while it is still being drawn
   }
 
   _push(x, y, w, dry) {
@@ -49,16 +51,16 @@ class Stroke {
     if (n) {
       const p = this.pts[n - 1];
       const dl = Math.hypot(x - p.x, y - p.y);
-      if (dl < 0.5) { p.w = w; p.dry = dry; return; }
+      if (dl < 0.5) { p.w = w; p.dry = dry; this.ver++; return; }
       this.len += dl; this.cum.push(this.len);
     }
-    this.pts.push({ x, y, w, dry });
+    this.pts.push({ x, y, w, dry }); this.ver++;
     this.bx0 = Math.min(this.bx0, x - w); this.by0 = Math.min(this.by0, y - w);
     this.bx1 = Math.max(this.bx1, x + w); this.by1 = Math.max(this.by1, y + w);
   }
 
   _pop() {
-    this.pts.pop();
+    this.pts.pop(); this.ver++;
     if (this.cum.length > 1) this.cum.pop();
     this.len = this.cum[this.cum.length - 1];
   }
@@ -102,6 +104,7 @@ class Stroke {
     }
     const avgW = m ? this.wsum / m : 6;
     this.life = BRUSH.LIFE_BASE + avgW * BRUSH.LIFE_PER_W;
+    this.live = null;
     if (n < 2) { this.dead = true; return; }
     this.rasterize();
   }
@@ -183,57 +186,73 @@ class Stroke {
 
   // Paints opaque ink onto a transparent surface; the caller applies the stroke's fade.
   static paint(ctx, pts, id, halo = true) {
-    const n = pts.length; if (n < 1) return;
-    // wet halo: ink bleeding into the fibres
+    if (pts.length < 1) return;
+    Stroke.paintBase(ctx, pts, id, halo);
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out';
+    Stroke.paintLanes(ctx, pts, id, Stroke.frames(pts, 0, pts.length - 1, []), 0, pts.length - 1);
+    ctx.restore();
+    Stroke.paintGranules(ctx, pts, id);
+  }
+
+  // the ink itself: bleed halo, body, dried rim, and the dab where the brush landed
+  static paintBase(ctx, pts, id, halo) {
     if (halo) { Stroke.outline(ctx, pts, id, 1.7, false); ctx.fillStyle = 'rgba(40,44,62,0.12)'; ctx.fill(); }
-    // body
     Stroke.outline(ctx, pts, id, 1, true);
     ctx.fillStyle = 'rgba(24,26,36,0.88)'; ctx.fill();
-    // dried edge: ink pools darker at the rim
     ctx.strokeStyle = 'rgba(8,9,16,0.45)'; ctx.lineWidth = 1.2; ctx.lineJoin = 'round'; ctx.stroke();
     // 起笔: the brush lands with a heavier dab
     const p0 = pts[0];
     ctx.fillStyle = 'rgba(16,18,26,0.6)';
     ctx.beginPath(); ctx.ellipse(p0.x, p0.y, p0.w * 0.95, p0.w * 0.75, id, 0, TAU); ctx.fill();
-    // 飞白: fast, dry passages are raked open in long parallel streaks, so the paper shows through
-    ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // bristle marks: every hair of the brush leaves a faint lighter track through the whole stroke
-    for (let k = 0; k < 9; k++) {
-      const off = ((k + 0.5) / 9 - 0.5) * 0.8 + (hash2(id, k, 31) - 0.5) * 0.08;
-      ctx.lineWidth = 0.5 + hash2(id, k, 33) * 0.9; ctx.strokeStyle = `rgba(0,0,0,${0.08 + hash2(id, k, 35) * 0.16})`;
+  }
+
+  // the hairs of the brush: 9 faint bristle tracks through the whole stroke, and 7 streaks of 飞白 where it ran dry.
+  // Drawn as opaque lines; the caller cuts them out of the ink (destination-out) so the paper shows through.
+  static lanes(id) {
+    const c = Stroke._laneCache || (Stroke._laneCache = new Map());
+    let list = c.get(id);
+    if (list) return list;
+    list = [];
+    for (let k = 0; k < 9; k++) list.push({ off: ((k + 0.5) / 9 - 0.5) * 0.8 + (hash2(id, k, 31) - 0.5) * 0.08, lw: 0.5 + hash2(id, k, 33) * 0.9, a: 0.08 + hash2(id, k, 35) * 0.16, on: (p, s) => vnoise(s * 0.02, k * 7.1 + id, 37) > 0.3 });
+    for (let k = 0; k < 7; k++) list.push({ off: (hash2(id, k, 3) - 0.5) * 0.95, lw: 0.5 + hash2(id, k, 13) * 1.4, a: 0.65 + hash2(id, k, 17) * 0.35, on: (p, s) => p.dry > 0.12 && vnoise(s * 0.035, k * 5.3 + id, 9) < p.dry * 1.05 });
+    if (c.size > 64) c.clear();
+    c.set(id, list);
+    return list;
+  }
+
+  // arc length and unit normal at points from..to, written into out (shared by every lane)
+  static frames(pts, from, to, out) {
+    const n = pts.length;
+    for (let i = from; i <= to; i++) {
+      const p = pts[i], a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      const s = i ? out[i - 1].s + Math.hypot(p.x - a.x, p.y - a.y) : 0;
+      const tx = b.x - a.x, ty = b.y - a.y, L = Math.hypot(tx, ty) || 1;
+      out[i] = { s, nx: -ty / L, ny: tx / L };
+    }
+    return out;
+  }
+
+  // lanes over points i0..i1. Butt caps, so a stroke painted in pieces meets end to end with no overlap
+  static paintLanes(ctx, pts, id, fr, i0, i1) {
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+    for (const ln of Stroke.lanes(id)) {
+      ctx.lineWidth = ln.lw; ctx.strokeStyle = `rgba(0,0,0,${ln.a})`;
       ctx.beginPath();
-      let s = 0, open = false;
-      for (let i = 0; i < n; i++) {
-        const p = pts[i], a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
-        if (i) s += Math.hypot(p.x - a.x, p.y - a.y);
-        let tx = b.x - a.x, ty = b.y - a.y; const L = Math.hypot(tx, ty) || 1; tx /= L; ty /= L;
-        const on = vnoise(s * 0.02, k * 7.1 + id, 37) > 0.3;
-        const x = p.x - ty * off * p.w, y = p.y + tx * off * p.w;
-        if (on) { if (open) ctx.lineTo(x, y); else { ctx.moveTo(x, y); open = true; } } else open = false;
+      let open = false;
+      for (let i = i0; i <= i1; i++) {
+        const p = pts[i], f = fr[i];
+        if (!ln.on(p, f.s)) { open = false; continue; }
+        const x = p.x + f.nx * ln.off * p.w, y = p.y + f.ny * ln.off * p.w;
+        if (open) ctx.lineTo(x, y); else { ctx.moveTo(x, y); open = true; }
       }
       ctx.stroke();
     }
-    const lanes = 7;
-    for (let k = 0; k < lanes; k++) {
-      const off = (hash2(id, k, 3) - 0.5) * 0.95, lw = 0.5 + hash2(id, k, 13) * 1.4;
-      ctx.lineWidth = lw; ctx.strokeStyle = `rgba(0,0,0,${0.65 + hash2(id, k, 17) * 0.35})`;
-      let open = false, s = 0;
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const p = pts[i], a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
-        if (i) s += Math.hypot(p.x - a.x, p.y - a.y);
-        let tx = b.x - a.x, ty = b.y - a.y; const L = Math.hypot(tx, ty) || 1; tx /= L; ty /= L;
-        const on = p.dry > 0.12 && vnoise(s * 0.035, k * 5.3 + id, 9) < p.dry * 1.05;
-        const x = p.x - ty * off * p.w, y = p.y + tx * off * p.w;
-        if (on) { if (!open) { ctx.moveTo(x, y); open = true; } else ctx.lineTo(x, y); }
-        else open = false;
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
-    // a few ink granules along the wet parts
+  }
+
+  // a few ink granules along the wet parts
+  static paintGranules(ctx, pts, id) {
     ctx.fillStyle = 'rgba(10,11,16,0.5)';
-    for (let i = 0; i < n; i += 4) {
+    for (let i = 0; i < pts.length; i += 4) {
       const p = pts[i]; if (p.dry > 0.4 || hash2(id, i, 41) > 0.4) continue;
       const ox = (hash2(id, i, 42) - 0.5) * p.w * 0.7, oy = (hash2(id, i, 43) - 0.5) * p.w * 0.7;
       ctx.beginPath(); ctx.arc(p.x + ox, p.y + oy, 0.5 + hash2(id, i, 44) * 0.9, 0, TAU); ctx.fill();
@@ -265,8 +284,8 @@ class Stroke {
     this.bleed = bv; this.bpad = bp;
   }
 
-  // finished strokes are drawn from their raster; live strokes are painted through a scratch surface
-  draw(ctx, camX, scratch) {
+  // finished strokes are drawn from their raster; a stroke still being drawn is painted live
+  draw(ctx, camX) {
     if (this.dead) return;
     if (this.canvas) {
       // the halo soaks in over the first second, as ink does on 宣纸
@@ -275,21 +294,50 @@ class Stroke {
       ctx.globalAlpha = this.alpha;
       ctx.drawImage(this.canvas, this.cx - camX, this.cy, this.cw, this.ch);
       ctx.globalAlpha = 1;
-    } else if (scratch && this.pts.length > 1) {
-      // only the stroke's own box is cleared, painted and copied, not the whole screen
-      const sc = scratch.ctx, k = scratch.k, cw = scratch.canvas.width, chh = scratch.canvas.height, pad = 20;
-      const x0 = Math.max(0, Math.floor((this.bx0 - pad - camX) * k)), y0 = Math.max(0, Math.floor((this.by0 - pad) * k));
-      const x1 = Math.min(cw, Math.ceil((this.bx1 + pad - camX) * k)), y1 = Math.min(chh, Math.ceil((this.by1 + pad) * k));
-      if (x1 <= x0 || y1 <= y0) return;
-      sc.setTransform(1, 0, 0, 1, 0, 0);
-      sc.clearRect(x0, y0, x1 - x0, y1 - y0);
-      sc.setTransform(k, 0, 0, k, -camX * k, 0);
-      Stroke.paint(sc, this.pts, this.id);
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalAlpha = this.alpha;
-      ctx.drawImage(scratch.canvas, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
-      ctx.restore();
+    } else if (this.pts.length > 1) this.drawLive(ctx, camX);
+  }
+
+  // While the brush is down, the cheap outline is repainted as the stroke changes, but the costly bristle and 飞白
+  // texture is added to a mask a piece at a time as points settle, so a long stroke costs no more per frame than a short one.
+  // Both surfaces are in the stroke's own world space, so the camera moving costs nothing.
+  drawLive(ctx, camX) {
+    const k = Stroke.RES, pad = 20;
+    const nx0 = this.bx0 - pad, ny0 = this.by0 - pad, nx1 = this.bx1 + pad, ny1 = this.by1 + pad;
+    let L = this.live;
+    if (!L || L.k !== k || nx0 < L.x0 || ny0 < L.y0 || nx1 > L.x1 || ny1 > L.y1) {
+      // (re)allocate with room to grow; keep the mask painted so far when the scale is unchanged
+      const g = clamp((nx1 - nx0) * 0.25, 120, 360), x0 = nx0 - g, y0 = ny0 - g * 0.5, x1 = nx1 + g, y1 = ny1 + g * 0.5;
+      const surf = () => {
+        const c = document.createElement('canvas'); c.width = Math.ceil((x1 - x0) * k); c.height = Math.ceil((y1 - y0) * k);
+        const cx = c.getContext('2d'); cx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k); return { c, cx };
+      };
+      const next = { k, x0, y0, x1, y1, body: surf(), mask: surf(), fr: [], done: 0, ver: -1 };
+      if (L && L.k === k) { next.mask.cx.drawImage(L.mask.c, L.x0, L.y0, L.x1 - L.x0, L.y1 - L.y0); next.fr = L.fr; next.done = L.done; }
+      this.live = L = next;
     }
+    const pts = this.pts, n = pts.length;
+    // a point's lanes are final once its neighbour is (the provisional tail can still move)
+    const settled = n - (this.prov ? 1 : 0) - 2;
+    if (settled > L.done) {
+      Stroke.frames(pts, L.fr.length, settled, L.fr);
+      Stroke.paintLanes(L.mask.cx, pts, this.id, L.fr, L.done, settled);
+      L.done = settled;
+    }
+    // the part of the surfaces the stroke covers, in device pixels
+    const rx = Math.max(0, Math.floor((nx0 - L.x0) * k)), ry = Math.max(0, Math.floor((ny0 - L.y0) * k));
+    const rw = Math.min(L.body.c.width - rx, Math.ceil((nx1 - nx0) * k) + 2), rh = Math.min(L.body.c.height - ry, Math.ceil((ny1 - ny0) * k) + 2);
+    if (L.ver !== this.ver) {
+      L.ver = this.ver;
+      const b = L.body.cx;
+      b.save(); b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(rx, ry, rw, rh); b.restore();
+      Stroke.paintBase(b, pts, this.id, true);
+      b.save(); b.setTransform(1, 0, 0, 1, 0, 0); b.globalCompositeOperation = 'destination-out';
+      b.drawImage(L.mask.c, rx, ry, rw, rh, rx, ry, rw, rh); b.restore();
+      Stroke.paintGranules(b, pts, this.id);
+    }
+    ctx.globalAlpha = this.alpha;
+    ctx.drawImage(L.body.c, rx, ry, rw, rh, L.x0 + rx / k - camX, L.y0 + ry / k, rw / k, rh / k);
+    ctx.globalAlpha = 1;
   }
 
   // which way along the stroke (+1 with the brush, -1 against it) the current flows: always onward, toward +x

@@ -18,7 +18,7 @@ const GOAL_POOL = [
   { stat: 'combo',  tiers: [5, 7, 9],        zh: n => `连珠 ×${n}`, en: n => `Chain an ×${n} pearl combo` },
   { stat: 'rings',  tiers: [4, 7, 10],       zh: n => `穿过 ${n} 个圆相`, en: n => `Swim through ${n} ensō rings` },
   { stat: 'leaps',  tiers: [3, 6, 10],       zh: n => `鲤跃 ${n} 次`, en: n => `Leap between strokes ${n} times` },
-  { stat: 'form',   tiers: [1, 2, 3],        zh: n => `一局化为${FORMS[n].zh}`, en: n => `Evolve into a ${FORMS[n].en.split(',')[0]} in one run` },
+  { stat: 'form',   tiers: [1, 2, 3],        zh: n => `一局化为${FORMS[n].zh}`, en: n => `Evolve into a ${FORMS[n].en} in one run` },
   { stat: 'close',  tiers: [2, 3, 5],        zh: n => `险过鱼钩 ${n} 次`, en: n => `Slip past ${n} hooks by a whisker` },
   { stat: 'flow',   tiers: [3, 4, 5],        zh: n => `流势达 ×${n}`, en: n => `Reach a ×${n} flow` },
 ];
@@ -44,6 +44,29 @@ const Progress = (() => {
     rollDay();
     return d;
   }
+  // The portal's synced save turned up after the game started from local data. Fold the two together, keeping the
+  // better of every record, so neither side's progress is lost, then write the result back.
+  function adopt() {
+    let acct = null;
+    try { acct = JSON.parse(Platform.storage.get(KEY) || 'null'); } catch (e) { acct = null; }
+    const a = Object.assign(fresh(), acct && typeof acct === 'object' ? acct : {}), b = d;
+    a.bestScore = Math.max(a.bestScore, +(Platform.storage.get('moli.best') || 0));
+    const m = Object.assign(fresh(), a);
+    for (const k of ['runs', 'dist', 'pearls', 'lotus', 'rings', 'gates', 'leaps', 'seals', 'bestScore', 'bestDist', 'bestCombo', 'bestForm']) m[k] = Math.max(a[k] || 0, b[k] || 0);
+    m.unlocked = [...new Set([...a.unlocked, ...b.unlocked])];
+    m.koi = m.unlocked.includes(a.koi) ? a.koi : 'shu';
+    // streak: the later record wins, but a play on the day after the other record's last day continues its run
+    const late = b.lastDay > a.lastDay ? b : a, early = late === b ? a : b;
+    m.lastDay = late.lastDay;
+    m.streak = a.lastDay === b.lastDay ? Math.max(a.streak, b.streak) : late.lastDay - early.lastDay === 1 ? Math.max(late.streak, early.streak + 1) : late.streak;
+    if (a.goalDay === b.goalDay && a.goals.length === b.goals.length) {
+      m.goals = a.goals.map((g, i) => ({ ...g, best: Math.max(g.best, b.goals[i].best), done: g.done || b.goals[i].done }));
+    } else { const g = b.goalDay > a.goalDay ? b : a; m.goalDay = g.goalDay; m.goals = g.goals; }
+    d = m;
+    rollDay(); save();
+    return d;
+  }
+
   function save() {
     Platform.storage.set(KEY, JSON.stringify(d));
     Platform.storage.set('moli.best', String(d.bestScore));
@@ -71,7 +94,7 @@ const Progress = (() => {
   function beginRun() {
     rollDay();
     const today = dayNum();
-    if (d.lastDay !== today) { d.streak = d.lastDay === today - 1 ? d.streak + 1 : 1; d.lastDay = today; }
+    if (d.lastDay !== today) { d.streak = d.lastDay === today - 1 ? d.streak + 1 : 1; d.lastDay = today; save(); }
   }
 
   // live check during a run: returns goals completed just now, so the game can stamp them on screen
@@ -120,5 +143,5 @@ const Progress = (() => {
 
   function choose(id) { if (d.unlocked.includes(id)) { d.koi = id; save(); } }
 
-  return { load, save, beginRun, check, endRun, nextUnlock, choose, goalText, get data() { return d; } };
+  return { load, adopt, save, beginRun, check, endRun, nextUnlock, choose, goalText, get data() { return d; } };
 })();

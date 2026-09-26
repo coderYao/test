@@ -31,7 +31,8 @@ const HUD_INK = { x: 62, y: 58 };
 // the crisp things (strokes, koi, HUD) at full resolution in front. Resolution steps down on devices that can't
 // hold ~48 fps: fg and bg are fractions of the device pixel ratio (the background never goes above 1x).
 const QUALITY = [{ fg: 1, bg: 1 }, { fg: 0.8, bg: 0.85 }, { fg: 0.66, bg: 0.7 }, { fg: 0.55, bg: 0.6 }];
-const loadQuality = () => { try { return clamp(+localStorage.getItem('moli.quality') || 0, 0, QUALITY.length - 1); } catch (e) { return 0; } };
+// Each visit starts one step above the last saved level, so a device that was only briefly slow (thermal, power mode) recovers.
+const loadQuality = () => { try { return clamp((+localStorage.getItem('moli.quality') || 0) - 1, 0, QUALITY.length - 1); } catch (e) { return 0; } };
 
 class Game {
   constructor(canvas) {
@@ -81,22 +82,29 @@ class Game {
     this.ctx.setTransform(dpr * this.scale, 0, 0, dpr * this.scale, 0, 0);
     this.bctx.setTransform(bdpr * this.scale, 0, 0, bdpr * this.scale, 0, 0);
     Stroke.RES = Math.min(3, dpr * this.scale);
-    if (!this.liveSurf) { const c = document.createElement('canvas'); this.liveSurf = { canvas: c, ctx: c.getContext('2d'), k: 1 }; }
-    this.liveSurf.canvas.width = this.canvas.width; this.liveSurf.canvas.height = this.canvas.height; this.liveSurf.k = dpr * this.scale;
     if (this.field) this.field.resize(Math.ceil((this.LW + 600) / CELL));
     if (this.scenery.paper) this.scenery.paperPattern = this.bctx.createPattern(this.scenery.paper, 'repeat');
   }
 
-  // Frame-rate governor: if play sits below ~48 fps for a couple of seconds, drop a resolution step, and remember
-  // it for this device. It only ever steps down, so it can't oscillate.
+  // Frame-rate governor. If play sits below ~48 fps for a couple of seconds, it tries one resolution step down. A slow
+  // frame rate is not always load: a 30 Hz power mode or a throttled frame looks the same. So the step is a trial: it is
+  // kept (and saved for this device) only if the next window is clearly faster, otherwise it is undone and the governor
+  // stands down for the session. Only gameplay frames count; menus with blurred overlays would mislead it.
   watchFrames(ms) {
-    if (document.hidden || this.paused || ms > 120 || (this.state !== 'play' && this.state !== 'title')) return;
+    if (this.qDone || document.hidden || this.paused || ms > 120 || this.state !== 'play') return;
     const log = this.frameLog; log.push(ms); if (log.length > 90) log.shift();
     this.qCool -= ms / 1000;
-    if (this.qCool > 0 || log.length < 90 || this.q >= QUALITY.length - 1) return;
-    if (log.reduce((a, b) => a + b, 0) / log.length > 1000 / 48) {
-      this.q++; log.length = 0; this.qCool = 3;
+    if (this.qCool > 0 || log.length < 90) return;
+    const mean = log.reduce((a, b) => a + b, 0) / log.length;
+    const t = this.qTrial;
+    if (t) {
+      this.qTrial = null;
+      if (mean > t.mean * 0.9) { this.q = t.from; this.qDone = true; this.resize(); return; }
       try { localStorage.setItem('moli.quality', String(this.q)); } catch (e) { /* private mode */ }
+    }
+    if (mean > 1000 / 48 && this.q < QUALITY.length - 1) {
+      this.qTrial = { from: this.q, mean };
+      this.q++; log.length = 0; this.qCool = 2;
       this.resize();
     }
   }
@@ -123,7 +131,7 @@ class Game {
     this.seasonIdx = 0; this.seasonFlash = 0;
     this.hintT = 0; this.drewOnce = false; this.waterHintT = 0; this.waterHintShown = false;
     this.shake = 0; this.slowmo = 0; this.inkPulse = 0; this.scorePop = 0; this.banner = null; this.bannerQ = []; this.goalCheckT = 0;
-    this.magic = 0; this.flash = 0; this.caption = null; this.dayPart = null;
+    this.magic = 0; this.flash = 0; this.caption = null; this.dayPart = null; this.celebrated = false;
     // opening stroke: the scroll paints the first current for the koi
     this.guide = { t: 0, dur: 1.1, stroke: new Stroke(), from: { x: 60, y: 330 }, to: { x: 640, y: 372 } };
     this.strokes.push(this.guide.stroke);
@@ -406,8 +414,12 @@ class Game {
       // pickups
       for (const p of this.world.pearls) {
         if (p.taken) continue;
-        if (koi.form >= 2) { const d = dist(p.x, p.y, koi.x, koi.y); if (d < 100) { const k = Math.min(1, dt * 12); p.x += (koi.x - p.x) * k; p.y += (koi.y - p.y) * k; } }
-        if (dist(p.x, p.y, koi.x, koi.y) < (koi.form >= 2 ? 28 : 20)) {
+        if (koi.form >= 2) {
+          // the spirit koi's pull: pearls close in 450 px/s faster than the koi can swim away, at any frame rate
+          const d = dist(p.x, p.y, koi.x, koi.y);
+          if (d < 100 && d > 0.01) { const step = Math.min(d, (koi.speed() + 450) * dt); p.x += (koi.x - p.x) / d * step; p.y += (koi.y - p.y) / d * step; }
+        }
+        if (dist(p.x, p.y, koi.x, koi.y) < 20) {
           p.taken = true; this.pearls++; this.ink = Math.min(1, this.ink + 0.3); this.dry = false;
           this.comboT = 1.6; this.combo = Math.min(10, this.combo + 1); this.run.combo = Math.max(this.run.combo, this.combo);
           Audio.pluck(2 + this.combo, 0.45);
@@ -486,6 +498,7 @@ class Game {
       // your record, planted on the scroll
       if (!this.world.bestPassed && this.world.bestX > 400 && koi.x > this.world.bestX) {
         this.world.bestPassed = true; this.shake = 0.25; koi.glow = 1;
+        this.celebrate();
         Audio.arpeggio(4, 6, 0.4); this.burst(koi.x, koi.y, 'rgba(184,44,36,', 16);
         this.showBanner({ zh: '破纪录', en: 'Farther than ever before', t: 0, dur: 2.2 });
       }
@@ -568,6 +581,9 @@ class Game {
     this.wasOnRail = on;
   }
 
+  // the portal's celebration cue, kept for a broken record: once a run, whether that is distance mid-run or score at the end
+  celebrate() { if (this.celebrated) return; this.celebrated = true; Platform.happytime(); }
+
   showBanner(b) { if (this.banner) this.bannerQ.push(b); else this.banner = b; }
 
   // 化: the koi takes its next form, the scroll flares with light, and the world around it blooms
@@ -582,7 +598,7 @@ class Game {
     for (let i = 0; i < 14; i++) { const a = i / 14 * TAU; this.particles.push({ x: koi.x, y: koi.y, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, life: 1.1, max: 1.1, r: 8, col: 'rgba(252,246,230,', g: 0, kind: 'wisp' }); }
     for (let i = 0; i < 7; i++) Audio.pluck(4 + i, 0.3 - i * 0.02, 1.0 + i * 0.09);
     if (koi.form >= 4) Audio.gong(0.4);
-    this.showBanner({ zh: `化为${f.zh}`, en: `Your koi becomes a ${f.en}`, sub: `${f.perkZh} · ${f.perk}`, t: 0, dur: 3, gold: true });
+    this.showBanner({ zh: `化为${f.zh}`, en: `Your koi becomes a ${f.desc || f.en}`, sub: `${f.perkZh} · ${f.perk}`, t: 0, dur: 3, gold: true });
   }
 
   // 化龙之路: the five forms along the top-left, the next gate's distance, and how far along the koi is
@@ -609,7 +625,7 @@ class Game {
       ctx.fillText(i <= seen ? FORMS[i].short : '?', x, y + 5.5);
     }
     ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(30,30,40,0.88)';
-    const txt = f >= 4 ? '已化龙 · Ascended' : `化${i18nNext(f)} · next gate ${Math.max(0, Math.ceil((next - koi.x) / 10))} 丈`;
+    const txt = f >= 4 ? '已化龙 · Ascended' : `化${nextFormLabel(f)} · next gate ${Math.max(0, Math.ceil((next - koi.x) / 10))} 丈`;
     ctx.font = `600 14px ${FONT_TEXT}`; ctx.fillText(txt, x0, y + 32);
     ctx.restore();
   }
@@ -664,7 +680,6 @@ class Game {
         this.ripples.push({ x: g.x, y: g.y, r: g.r, life: 1 });
         this.showBanner({ zh: '鲤跃龙门', en: `Dragon Gate ${g.n}  ·  +${v}`, t: 0, dur: 1.9, red: true });
         this.evolve();
-        Platform.happytime();
       } else {
         this.run.rings++;
         const v = this.award(SCORE.RING); this.addFlow(FLOW.RING);
@@ -700,7 +715,7 @@ class Game {
     const res = Progress.endRun(run), P = Progress.data;
     this.best = P.bestScore;
     this.overT = 0;
-    if (res.newBest || res.newKoi.length) Platform.happytime();
+    if (res.newBest) this.celebrate();
     const r = REASONS[this.deathReason] || REASONS.ink;
     document.getElementById('over-reason').textContent = r[0];
     document.getElementById('over-reason-en').textContent = r[1];
@@ -711,7 +726,7 @@ class Game {
     document.getElementById('over-score').textContent = sc;
     document.getElementById('over-dist').textContent = run.dist;
     document.getElementById('over-form').textContent = FORMS[run.form].zh;
-    document.getElementById('over-form-en').textContent = FORMS[run.form].en.split(',')[0];
+    document.getElementById('over-form-en').textContent = FORMS[run.form].en;
     document.getElementById('over-flow').textContent = '×' + run.flow;
     document.getElementById('over-best').textContent = this.best;
     // the nudge back into the water: how close the record was
@@ -730,7 +745,6 @@ class Game {
     renderUnlock(document.getElementById('over-unlock'), res.newKoi);
     document.getElementById('over').classList.remove('hidden');
     if (res.newKoi.length) setTimeout(() => Audio.arpeggio(3, 7, 0.35, 0.08), 500);
-    renderTitleMeta();
   }
 
   // ---------- particles ----------
@@ -802,7 +816,7 @@ class Game {
     ctx.save(); ctx.translate(sx, sy);
     this.world.drawBest(ctx, cam, W, H, t);
     // strokes
-    for (const s of this.strokes) s.draw(ctx, cam, this.liveSurf);
+    for (const s of this.strokes) s.draw(ctx, cam);
     for (const s of this.strokes) s.drawFlow(ctx, cam, t, s === this.koi.rail);
     this.world.drawRings(ctx, cam, W, t);
     this.world.drawPickups(ctx, cam, W, t);
@@ -1234,17 +1248,17 @@ function renderTitleMeta() {
   describe(P.koi);
 }
 
-// the 音 / Sound button shows silence from either source: the player's own toggle, or the portal's mute setting
-// the next form's name, short, for the HUD line
-function i18nNext(f) { return FORMS[Math.min(4, f + 1)].zh + ' ' + FORMS[Math.min(4, f + 1)].en.split(',')[0]; }
+// the next form's name, for the HUD line
+function nextFormLabel(f) { const n = FORMS[Math.min(FORMS.length - 1, f + 1)]; return n.zh + ' ' + n.en; }
 
 // the road to the dragon on the title card: forms reached so far, and ones not yet seen
 function renderAscent(el) {
   const best = Progress.data.bestForm || 0;
   el.innerHTML = FORMS.map((f, i) => `<span class="fp${i <= best ? ' on' : ''}" title="${i <= best ? esc(f.zh + ' ' + f.en) : '?'}">${i <= best ? esc(f.short) : '?'}</span>`).join('<i></i>')
-    + `<span class="ft">${best ? `最高化境 ${esc(FORMS[best].zh)} <span class="en" lang="en">Best form: ${esc(FORMS[best].en.split(',')[0])}</span>` : '<span class="en" lang="en">Swim through Dragon Gates to evolve</span>'}</span>`;
+    + `<span class="ft">${best ? `最高化境 ${esc(FORMS[best].zh)} <span class="en" lang="en">Best form: ${esc(FORMS[best].en)}</span>` : '<span class="en" lang="en">Swim through Dragon Gates to evolve</span>'}</span>`;
 }
 
+// the 音 / Sound button shows silence from either source: the player's own toggle, or the portal's mute setting
 function syncMuteButton() {
   const b = document.getElementById('btn-mute'), site = Platform.muted(), off = site || Audio.isMuted();
   b.querySelector('.glyph').textContent = off ? '默' : '音';
@@ -1262,6 +1276,13 @@ window.addEventListener('load', async () => {
   await Platform.init();
   Platform.loadingStart();
   Progress.load(); // after the SDK, so the portal's synced save is the one read
+  // ...unless the SDK was too slow and arrives later: then merge its save in rather than overwrite it
+  Platform.onLateStorage(() => {
+    Progress.adopt();
+    const g = window.game; if (!g) return;
+    g.best = Progress.data.bestScore;
+    if (g.state === 'title') renderTitleMeta();
+  });
   const applyMute = m => { Audio.setDucked(m); syncMuteButton(); };
   applyMute(Platform.muted());
   Platform.onMuteChange(applyMute);

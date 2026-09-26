@@ -40,7 +40,7 @@ const FORMS = [
   { zh: '鲤', short: '鲤', en: 'Carp' },
   { zh: '锦鲤', short: '锦', en: 'Brocade Koi', perkZh: '回墨更快', perk: 'Ink refills faster' },
   { zh: '灵鲤', short: '灵', en: 'Spirit Koi', perkZh: '墨珠自来', perk: 'Pearls drift toward you' },
-  { zh: '蛟', short: '蛟', en: 'Jiao, the horned one', perkZh: '浓墨难伤', perk: 'Thick ink hurts less' },
+  { zh: '蛟', short: '蛟', en: 'Jiao', desc: 'Jiao, the horned one', perkZh: '浓墨难伤', perk: 'Thick ink hurts less' },
   { zh: '龙', short: '龙', en: 'Dragon', perkZh: '御风而行', perk: 'Glide on the wind; flow never falls below ×2' },
 ];
 

@@ -75,10 +75,12 @@ class Scenery {
 
   // where in the day this part of the scroll is painted
   daylight(worldX) {
+    if (this._dl && this._dlX === worldX) return this._dl;
     const p = ((Math.max(0, worldX) / DAY_LEN) % 1 + 1) % 1;
     let i = 0; while (i < DAY_KEYS.length - 2 && DAY_KEYS[i + 1][0] <= p) i++;
     const a = DAY_KEYS[i], b = DAY_KEYS[i + 1], f = smoothstep(a[0], b[0], p);
-    return {
+    this._dlX = worldX;
+    return this._dl = {
       p, k: lerp(a[2], b[2], f),
       tint: [lerp(a[1][0], b[1][0], f), lerp(a[1][1], b[1][1], f), lerp(a[1][2], b[1][2], f)],
       night: smoothstep(0.58, 0.66, p) * (1 - smoothstep(0.86, 0.95, p)),
