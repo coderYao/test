@@ -11,10 +11,11 @@
 <link rel="stylesheet" href="style.css?v=dev">
 </head>
 <body>
+<canvas id="bg"></canvas>
 <canvas id="game"></canvas>
 
 <div id="title" class="overlay">
-  <div class="panel">
+  <div class="panel title-panel">
     <div class="seal">墨</div>
     <h1>墨鲤</h1>
     <h2>Ink Koi</h2>
@@ -25,10 +26,24 @@
       <li><span class="zh"><b>慢笔浓墨</b>，粗而耐久；<b>疾笔飞白</b>，细而省墨。</span><span class="en" lang="en"><b>Slow strokes</b> are thick and last. <b>Fast strokes</b> are thin, dry and cheap.</span></li>
       <li><span class="zh"><b>墨会干</b>，砚台慢慢回墨；墨珠补墨，连珠乘势疾游。</span><span class="en" lang="en"><b>Ink runs out</b> and refills slowly. <b>Pearls</b> refill it and surge the koi forward.</span></li>
       <li><span class="zh"><b>浓墨伤鱼</b>：按住 <kbd>Shift</kbd>、右键拖动，或点「水」，以清水化开。</span><span class="en" lang="en"><b>Thick ink hurts the koi.</b> Hold <kbd>Shift</kbd>, right-drag, or tap 水 to wash it away.</span></li>
-      <li><span class="zh"><b>莲</b>出淤泥而不染：净化四周浓墨，墨潮暂退。</span><span class="en" lang="en"><b>A lotus</b> heals the koi, washes nearby ink clean, and makes the tide ebb.</span></li>
-      <li><span class="zh">躲开渔翁的<b>钩</b>，别被身后的<b>墨潮</b>追上。</span><span class="en" lang="en">Dodge the fisherman's <b>hooks</b>, and outrun the <b>ink tide</b> behind you.</span></li>
+      <li><span class="zh"><b>流势</b>：一路游、跃、穿圆相，分数最高 ×5；久沉则散。</span><span class="en" lang="en"><b>Flow</b> builds as the koi rides, leaps and threads rings, up to ×5 points.</span></li>
+      <li><span class="zh">每 300 丈一道<b>龙门</b>：穿过则墨水全满，墨潮退避。</span><span class="en" lang="en">Every 300 丈, swim through a <b>Dragon Gate</b> to refill everything.</span></li>
+      <li><span class="zh"><b>莲</b>净浓墨；躲开渔翁的<b>钩</b>，别被身后的<b>墨潮</b>追上。</span><span class="en" lang="en">A <b>lotus</b> washes ink away. Dodge the <b>hooks</b>, and outrun the <b>ink tide</b>.</span></li>
     </ul>
+    <div class="meta">
+      <section class="daily">
+        <div class="meta-h">今日 <span class="en" lang="en">Today</span><span class="streak" id="streak"></span></div>
+        <ol class="goals" id="goals-title"></ol>
+      </section>
+      <div class="ascent" id="ascent-title"></div>
+      <section class="pick">
+        <div class="meta-h">锦鲤 <span class="en" lang="en">Your koi</span></div>
+        <div class="koi-list" id="koi-list"></div>
+        <div class="koi-info" id="koi-info"></div>
+      </section>
+    </div>
     <p class="cta"><span class="zh">点击任意处开始</span><span class="en" lang="en">Click anywhere to begin</span></p>
+    <button class="link" id="btn-how">玩法 <span class="en" lang="en">How to play</span></button>
   </div>
 </div>
 
@@ -42,15 +57,26 @@
       <div class="score" id="over-score">0</div>
       <div class="score-label">得分 <span class="en" lang="en">Score</span></div>
       <div class="newbest" id="over-newbest">新纪录 <span class="en" lang="en">New best</span></div>
+      <p class="near" id="over-near" hidden></p>
     </div>
     <dl class="stats">
       <div><dd id="over-dist">0</dd><dt>行 · 丈<span class="en" lang="en">Distance</span></dt></div>
-      <div><dd id="over-pearls">0</dd><dt>墨珠<span class="en" lang="en">Pearls</span></dt></div>
-      <div><dd id="over-lotus">0</dd><dt>莲<span class="en" lang="en">Lotus</span></dt></div>
-      <div><dd id="over-best">0</dd><dt>最远<span class="en" lang="en">Best</span></dt></div>
+      <div><dd id="over-form">鲤</dd><dt>化境<span class="en" lang="en" id="over-form-en">Carp</span></dt></div>
+      <div><dd id="over-flow">×1</dd><dt>流势<span class="en" lang="en">Top flow</span></dt></div>
+      <div><dd id="over-best">0</dd><dt>最高<span class="en" lang="en">Best</span></dt></div>
     </dl>
-    <button id="btn-again">再游一次 <span class="en" lang="en">Swim again</span></button>
-    <p class="keys">或按 <kbd>Enter</kbd> / <kbd>R</kbd> <span class="en" lang="en">or press Enter / R</span></p>
+    <div class="over-meta">
+      <section class="daily">
+        <div class="meta-h">今日 <span class="en" lang="en">Today</span><span class="streak" id="streak-over"></span></div>
+        <ol class="goals" id="goals-over"></ol>
+      </section>
+      <section class="unlock" id="over-unlock"></section>
+    </div>
+    <div class="over-actions">
+      <button id="btn-again">再游一次 <span class="en" lang="en">Swim again</span></button>
+      <button id="btn-title" class="secondary">回卷首 <span class="en" lang="en">Title</span></button>
+    </div>
+    <p class="keys"><kbd>Enter</kbd> / <kbd>R</kbd> 再游 <span class="en" lang="en">swim again</span> · <kbd>Esc</kbd> 回卷首 <span class="en" lang="en">title</span></p>
   </div>
 </div>
 
@@ -67,6 +93,7 @@
 <script src="js/inkfield.js?v=dev"></script>
 <script src="js/brush.js?v=dev"></script>
 <script src="js/koi.js?v=dev"></script>
+<script src="js/progress.js?v=dev"></script>
 <script src="js/scenery.js?v=dev"></script>
 <script src="js/world.js?v=dev"></script>
 <script src="js/game.js?v=dev"></script>

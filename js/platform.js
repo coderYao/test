@@ -5,6 +5,8 @@ const Platform = (() => {
   let sdk = null;        // window.CrazyGames.SDK, once initialised on a host that supports it
   let playing = false;   // last gameplay state reported, so start/stop are only sent on changes
   let onMute = null;
+  let onLate = null;     // called if the SDK is adopted after init() stopped waiting for it
+  let waited = false;
 
   const call = fn => { if (!sdk) return undefined; try { return fn(sdk); } catch (e) { console.warn('[platform]', e); return undefined; } };
 
@@ -19,10 +21,12 @@ const Platform = (() => {
       call(k => k.game.addSettingsChangeListener(() => { if (onMute) onMute(muted()); }));
       if (onMute) onMute(muted());
       if (playing) call(k => k.game.gameplayStart());
+      if (waited && onLate) onLate();
     };
     const ready = Promise.resolve().then(() => s.init()).then(adopt);
     ready.catch(e => console.warn('[platform]', e));
     await Promise.race([ready, new Promise(r => setTimeout(r, timeoutMs))]).catch(() => {});
+    waited = true;
   }
 
   const muted = () => !!call(k => k.game.settings && k.game.settings.muteAudio);
@@ -60,6 +64,8 @@ const Platform = (() => {
   return {
     init, muted, setPlaying, midgameAd, storage,
     onMuteChange(cb) { onMute = cb; },
+    // storage switched from localStorage to the account's synced data after the game had already read it
+    onLateStorage(cb) { onLate = cb; },
     loadingStart() { call(k => k.game.loadingStart()); },
     loadingStop() { call(k => k.game.loadingStop()); },
     happytime() { call(k => k.game.happytime()); },

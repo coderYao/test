@@ -1,5 +1,6 @@
 html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #ece4d2; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
 body { font-family: "Noto Serif SC", "Songti SC", "SimSun", serif; color: #1e1e28; }
+#bg { display: block; position: fixed; inset: 0; pointer-events: none; }
 #game { display: block; position: fixed; inset: 0; cursor: none; touch-action: none; -webkit-user-select: none; user-select: none; }
 
 .overlay { pointer-events: none; position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(236,228,210,0.55); backdrop-filter: blur(1px); transition: opacity .5s; z-index: 5; }
@@ -47,6 +48,9 @@ kbd { font-family: inherit; border: 1px solid rgba(30,30,40,.4); border-radius: 
 .stats dt .en { font-size: 13.5px; }
 button .en { font-family: "Noto Serif SC", serif; font-size: 14px; letter-spacing: .04em; color: inherit; margin-top: 2px; }
 #btn-again { padding: 10px 34px; } #btn-again .en { display: inline; font-size: 16px; font-weight: 600; margin-left: 8px; }
+.over-actions { display: flex; gap: 12px; justify-content: center; align-items: stretch; flex-wrap: wrap; }
+button.secondary { padding: 10px 22px; font-size: 20px; border-color: rgba(30,30,40,.45); color: #3a3a46; }
+button.secondary .en { display: inline; font-size: 14px; font-weight: 600; margin-left: 6px; }
 button { pointer-events: auto; font-family: "Ma Shan Zheng", "KaiTi", serif; font-size: 22px; padding: 8px 26px; background: transparent; border: 1.5px solid #1e1e28; color: #1e1e28; cursor: pointer; letter-spacing: .1em; transition: background .2s, color .2s; }
 button:hover { background: #1e1e28; color: #f1eadb; }
 #controls { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 10px; z-index: 4; }
@@ -59,6 +63,62 @@ button:disabled { opacity: .45; cursor: default; } button:disabled:hover { backg
   .panel { padding: 22px 20px; max-width: 92vw; max-height: 88vh; overflow: auto; }
   h1 { font-size: 60px; } .how { font-size: 13px; } .en { font-size: 13px; } .lead .en { font-size: 14px; }
 }
+/* ---- progress: daily goals, streak, koi varieties, next unlock ---- */
+.title-panel .meta, .title-panel #btn-how { display: none; }
+.title-panel.returning:not(.show-how) .how { display: none; }
+.title-panel.returning .meta { display: block; text-align: left; margin: 4px 0 14px; }
+.title-panel.returning.show-how .meta { display: none; }
+.title-panel.returning #btn-how { display: inline-block; }
+button.link { pointer-events: auto; margin-top: 10px; padding: 3px 12px; font-size: 16px; border: none; border-bottom: 1px solid rgba(30,30,40,.35); letter-spacing: .06em; }
+button.link .en { display: inline; font-size: 13px; margin-left: 4px; }
+button.link:hover { background: rgba(30,30,40,.08); color: #1e1e28; }
+.meta-h { font-family: "Ma Shan Zheng", serif; font-size: 20px; margin: 0 0 6px; padding-bottom: 3px; border-bottom: 1px solid rgba(30,30,40,.16); display: flex; align-items: baseline; gap: 8px; }
+.meta-h .en { display: inline; font-family: "Noto Serif SC", serif; font-size: 13.5px; font-weight: 600; }
+.streak { margin-left: auto; font-family: "Noto Serif SC", serif; font-size: 12.5px; font-weight: 600; color: #b83228; }
+.goals { list-style: none; margin: 0 0 12px; padding: 0; }
+.goals li { display: grid; grid-template-columns: 26px 1fr auto; grid-template-rows: auto 3px; column-gap: 8px; align-items: center; margin: 0 0 7px; font-size: 13px; }
+.goals .mark { grid-row: 1 / 3; width: 22px; height: 22px; line-height: 22px; text-align: center; border: 1.5px solid rgba(184,50,40,.55); border-radius: 3px; font-family: "Ma Shan Zheng", serif; font-size: 16px; color: #f1eadb; }
+.goals li.done .mark { background: #b83228; border-color: #b83228; transform: rotate(-5deg); }
+.goals .gt .zh { opacity: .78; margin-right: 6px; } .goals .gt .en { display: inline; font-size: 13px; }
+.goals .gp { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: #2c2c38; }
+.goals li.done .gp { color: #b83228; }
+.goals li.done .gt { opacity: .6; text-decoration: line-through; text-decoration-color: rgba(184,50,40,.5); }
+.bar { height: 3px; background: rgba(30,30,40,.12); border-radius: 2px; overflow: hidden; grid-column: 2 / 4; }
+.bar i { display: block; height: 100%; background: #1e1e28; border-radius: 2px; }
+.goals li.done .bar i { background: #b83228; }
+.koi-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.koi-card { pointer-events: auto; width: 70px; height: 40px; padding: 3px; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(30,30,40,.22); border-radius: 4px; background: rgba(241,234,219,.6); }
+.koi-card:hover { background: rgba(255,250,238,.95); color: inherit; border-color: rgba(30,30,40,.5); }
+.koi-card.sel { border-color: #b83228; box-shadow: 0 0 0 2px rgba(184,50,40,.25); background: rgba(255,250,238,.95); }
+.koi-card.locked { border-style: dashed; }
+.koi-info { min-height: 20px; margin-top: 6px; font-size: 13px; } .koi-info .en { display: inline; font-size: 13px; }
+.koi-info b { font-family: "Ma Shan Zheng", serif; font-weight: 400; font-size: 17px; }
+.near { margin: 6px 0 0; font-size: 14px; } .near .en { display: inline; margin-left: 6px; font-size: 14px; } .near b { color: #b83228; }
+.over-meta { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; text-align: left; margin: 0 0 16px; }
+.over-meta .goals { margin: 0; } .over-meta .goals li { margin-bottom: 5px; }
+.over-meta .goals .gt .zh { display: none; }
+.unlock { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; padding: 8px 12px; border: 1px solid rgba(30,30,40,.14); background: rgba(255,250,238,.4); }
+.unlock.hidden { display: none; }
+.unlock .uh { font-family: "Ma Shan Zheng", serif; font-size: 18px; } .unlock .uh .en { display: inline; font-family: "Noto Serif SC", serif; font-size: 13px; font-weight: 600; margin-left: 4px; }
+.unlock .ur { display: flex; align-items: center; gap: 8px; }
+.unlock .un { font-family: "Ma Shan Zheng", serif; font-size: 26px; line-height: 1; color: #b83228; }
+.unlock .un .en { display: block; font-family: "Noto Serif SC", serif; font-size: 13px; font-weight: 600; color: #2c2c38; margin-top: 3px; }
+.unlock .us .en { font-size: 12.5px; }
+.unlock .bar { margin-top: 4px; } .unlock .uv { font-size: 12px; font-weight: 600; text-align: right; }
+.unlock.new { border-color: #b83228; background: rgba(184,50,40,.06); animation: popin .5s cubic-bezier(.2,1.6,.4,1) both .3s; }
+@keyframes popin { from { transform: scale(1.25); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+.over-panel { width: 600px; }
+}
+@media (max-width: 620px) { .over-meta { grid-template-columns: 1fr; gap: 8px; } }
+
+/* the game-over card carries progress now: tighten it on anything shorter than a tall laptop */
+@media (max-height: 860px) {
+  .over-panel { padding: 22px 34px 16px; }
+  .over-panel h1.small { font-size: 42px; } .en.reason { font-size: 18px; margin-top: 4px; }
+  .tip { margin-top: 8px; padding: 6px 12px; } .score { font-size: 70px; } .scorebox { margin: 8px 0 10px; }
+  .stats { margin-bottom: 12px; } .stats > div { padding: 6px 4px 5px; } .stats dd { font-size: 26px; }
+  .over-meta { margin-bottom: 12px; } .over-panel .keys { display: none; }
+
 /* laptop-height viewports: the bilingual card is ~630px tall single-column, so go two-up before it clips */
 @media (max-height: 700px) {
   .panel { max-width: min(900px, 94vw); padding: 20px 34px; }
@@ -81,9 +141,32 @@ button:disabled { opacity: .45; cursor: default; } button:disabled:hover { backg
   .cta { font-size: 18px; } .seal { width: 30px; height: 30px; line-height: 30px; font-size: 20px; right: 14px; top: 12px; }
   .over-panel { width: 560px; padding: 12px 26px; } .over-panel h1.small { font-size: 34px; display: block; }
   .score { font-size: 48px; } .scorebox { margin: 4px 0; } .stats { margin: 0 0 8px; } .stats > div { padding: 4px; } .stats dd { font-size: 22px; } .stats dt, .stats dt .en { font-size: 12px; display: inline; } .stats dt .en { margin-left: 4px; }
-  .en.reason { font-size: 16px; margin: 2px 0 0; display: inline; } .tip { margin-top: 5px; padding: 4px 10px; max-width: none; } .tip .zh, .tip .en { display: inline; font-size: 12.5px; } .keys { display: none; } #btn-again { padding: 5px 24px; }
+  .en.reason { font-size: 16px; margin: 2px 0 0; display: inline; } .tip { margin-top: 5px; padding: 4px 10px; max-width: none; } .tip .zh, .tip .en { display: inline; font-size: 12.5px; } .keys { display: none; } #btn-again, button.secondary { padding: 5px 20px; }
 }
 
+.ascent { display: flex; align-items: center; gap: 0; margin: 0 0 12px; }
+.ascent .fp { width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 50%; border: 1.2px solid rgba(30,30,40,.3); font-family: "Ma Shan Zheng", serif; font-size: 16px; color: rgba(30,30,40,.5); background: rgba(241,234,219,.6); }
+.ascent .fp.on { background: #be862c; border-color: rgba(120,70,20,.6); color: #fcf6e8; }
+.ascent .fp.on:first-child { background: #b83228; }
+.ascent i { width: 14px; height: 2px; background: rgba(30,30,40,.2); }
+.ascent .ft { margin-left: 12px; font-family: "Ma Shan Zheng", serif; font-size: 17px; } .ascent .ft .en { display: inline; font-family: "Noto Serif SC", serif; font-size: 13px; font-weight: 600; margin-left: 4px; }
+/* short screens: goals and koi picker shrink with the rest of the card */
+@media (max-height: 560px) {
+  .title-panel.returning .meta { margin: 0 0 6px; }
+  .meta-h { font-size: 16px; margin-bottom: 3px; } .meta-h .en { font-size: 12px; }
+  .goals li { margin-bottom: 3px; font-size: 12px; grid-template-columns: 20px 1fr auto; } .goals .gt .en { font-size: 12px; }
+  .goals .mark { width: 16px; height: 16px; line-height: 16px; font-size: 12px; }
+  .goals { margin-bottom: 6px; }
+  .koi-card { width: 58px; height: 32px; } .koi-card canvas { width: 50px !important; height: 25px !important; }
+  .koi-info { margin-top: 3px; font-size: 12px; }
+  .ascent { margin-bottom: 5px; } .ascent .fp { width: 20px; height: 20px; line-height: 20px; font-size: 13px; } .ascent i { width: 8px; }
+  button.link { margin-top: 4px; font-size: 14px; }
+  .over-meta { gap: 10px; margin-bottom: 8px; } .over-meta .goals li { margin-bottom: 2px; }
+  .unlock { padding: 4px 8px; gap: 1px; } .unlock .uh { font-size: 15px; } .unlock .un { font-size: 20px; } .unlock canvas { width: 64px !important; height: 32px !important; }
+  .near { margin-top: 2px; font-size: 12.5px; } .near .en { font-size: 12.5px; }
+  #over .tip { display: none; } .over-panel { max-height: 96vh; overflow: auto; }
+  .over-panel h1.small, .over-panel .en.reason { display: inline-block; vertical-align: baseline; } .over-panel .en.reason { margin-left: 10px; }
+}
 @media (max-height: 560px) and (max-width: 760px) {
   .panel { padding: 10px 18px; max-height: 96vh; }
   h1 { font-size: 36px; } h2 { font-size: 18px; }

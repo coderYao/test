@@ -36,7 +36,7 @@ const seed = +(params.get('seed') || 20260920);
 // Runs inside the game's own page (an off-screen iframe of exactly the cover's size): stage a moment of play.
 function compose(seed) {
   const g = window.game, W = g.LW, H = 720;
-  g.seed = seed; g.scenery = new Scenery(seed); g.scenery.makePaper(g.ctx); g.resize();
+  g.seed = seed; g.scenery = new Scenery(seed); g.scenery.makePaper(g.ctx); g.q = 0; g.resize();
   g.reset(); g.strokes.length = 0; g.guide = null; g.state = 'title'; g.time = 7.3;
   g.camX = 2400; g.field.shiftTo(g.camX - 150);
   const cx = g.camX, wide = W > 900;
@@ -116,7 +116,7 @@ function paint(cover) {
       win.eval('(' + compose + ')(' + seed + ')');
       const out = document.createElement('canvas'); out.width = cover.w; out.height = cover.h;
       const ctx = out.getContext('2d');
-      ctx.drawImage(win.document.getElementById('game'), 0, 0, cover.w, cover.h);
+      win.game.composite(ctx, cover.w, cover.h);
       await document.fonts.load('200px "Ma Shan Zheng"', '墨鲤 Ink Koi');
       title(ctx, cover.w, cover.h);
       f.remove();
