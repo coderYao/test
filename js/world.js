@@ -1,7 +1,7 @@
 'use strict';
 // ---------- procedural scroll: ink clouds, pearls, lotus, ensō rings, dragon gates, fishing hooks, the rising ink tide ----------
 const CHUNK = 800;
-const GATE = { FIRST: 2600, EVERY: 3000, R: 84 }; // 龙门: a great vermilion ensō every 300 丈
+const GATE = { FIRST: 2600, EVERY: 4500, R: 84 }; // 龙门: a great vermilion ensō at 260 丈, then every 450 丈
 const RING_R = [44, 56];                          // 圆相: small ensō rings to swim through
 
 class World {

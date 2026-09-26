@@ -18,7 +18,7 @@ const GOAL_POOL = [
   { stat: 'combo',  tiers: [5, 7, 9],        zh: n => `连珠 ×${n}`, en: n => `Chain an ×${n} pearl combo` },
   { stat: 'rings',  tiers: [4, 7, 10],       zh: n => `穿过 ${n} 个圆相`, en: n => `Swim through ${n} ensō rings` },
   { stat: 'leaps',  tiers: [3, 6, 10],       zh: n => `鲤跃 ${n} 次`, en: n => `Leap between strokes ${n} times` },
-  { stat: 'form',   tiers: [1, 2, 3],        zh: n => `一局化为${FORMS[n].zh}`, en: n => `Evolve into a ${FORMS[n].en} in one run` },
+  { stat: 'form',   tiers: [1, 2, 2],        zh: n => `一局化为${FORMS[n].zh}`, en: n => `Evolve into a ${FORMS[n].en} in one run` },
   { stat: 'close',  tiers: [2, 3, 5],        zh: n => `险过鱼钩 ${n} 次`, en: n => `Slip past ${n} hooks by a whisker` },
   { stat: 'flow',   tiers: [3, 4, 5],        zh: n => `流势达 ×${n}`, en: n => `Reach a ×${n} flow` },
 ];
