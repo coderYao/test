@@ -62,6 +62,8 @@ js/game.js      loop, input, HUD, particles, states
 tools/serve.py             no-cache dev server
 tools/build_crazygames.py  packages dist/ink-koi-crazygames.zip for the CrazyGames portal
 tools/covers.html          paints the portal cover images with the game's own code
+tools/record.html          renders the portal preview videos offline with a scripted brush
+tools/collect_frames.py    receives those frames and encodes the MP4s with ffmpeg
 ```
 
 Publishing on CrazyGames: see [`docs/CRAZYGAMES.md`](docs/CRAZYGAMES.md).

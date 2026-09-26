@@ -602,8 +602,8 @@ class Game {
   }
 
   // centred text that never runs off a narrow canvas: shrinks to fit the width
-  fitText(ctx, text, px, font, y, W, weight = '') {
-    const w = this.textW(ctx, `${weight}${px}px ${font}`, text), max = W - 48;
+  fitText(ctx, text, px, font, y, W, weight = '', max = W - 48) {
+    const w = this.textW(ctx, `${weight}${px}px ${font}`, text);
     ctx.font = `${weight}${w > max ? Math.floor(px * max / w) : px}px ${font}`;
     ctx.fillText(text, W / 2, y);
   }
@@ -638,7 +638,7 @@ class Game {
       ctx.fillStyle = 'rgba(30,30,40,0.9)'; ctx.font = `72px ${FONT_BRUSH}`; ctx.textAlign = 'center';
       ctx.fillText(SEASONS[si].name, W / 2, H * 0.4);
       ctx.font = `600 34px ${FONT_TEXT}`; ctx.fillText(SEASONS[si].en, W / 2, H * 0.4 + 48);
-      this.fitText(ctx, POEMS[si] + ' · ' + POEMS_EN[si], 20, FONT_TEXT, H * 0.4 + 82, W);
+      this.fitText(ctx, POEMS[si] + ' · ' + POEMS_EN[si], 20, FONT_TEXT, H * 0.4 + 82, W, '', W - 210); // centred, so clear of the inscription column on both sides
       ctx.restore();
     }
   }

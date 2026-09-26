@@ -64,7 +64,7 @@ some regions. The game starts with fallback faces after 2.5 s if they do not arr
 subsets of both fonts (both are OFL-licensed) would remove the dependency; it needs the font files
 downloaded and `fonttools` to subset them.
 
-## 4. Covers and video
+## 4. Covers and videos
 
 Open `/tools/covers.html` from a local server (`python3 tools/serve.py`) and use the download links. It
 paints the three required covers with the game's own scenery, brush, koi and pickups, and adds only the
@@ -76,10 +76,32 @@ game title (CrazyGames allows no other text, borders or logos):
 
 `?seed=1234` gives different mountains.
 
-Still to make by hand: the **preview video**. 15–20 s, no sound, ≤ 50 MB, 1080p, in both landscape (16:9)
-and portrait (2:3); no black bars, logo transitions, default mouse cursor or promotional text; ideally
-opening on the cover image. The in-game brush cursor replaces the system cursor, so a plain screen recording
-of a good run works.
+### Preview videos
+
+CrazyGames wants 15–20 s, no sound, ≤ 50 MB, 1080p, in landscape (16:9) and portrait (2:3), with no black
+bars, logo transitions, system cursor or promotional text, ideally opening on the cover image.
+
+They are rendered offline rather than screen-recorded: `tools/record.html` steps the real game at a fixed
+60 Hz while a scripted brush plays it through the same calls the pointer handlers make, so a take is
+identical on any machine, runs at full quality regardless of frame rate, and has no system cursor. Each
+video opens on the cover and cross-fades into play: pearls and a combo surge, the water brush washing a blot
+off the road, a lotus purifying the ink around it, a fishing hook, and the turn from spring to summer.
+
+```
+python3 tools/serve.py                 # http://localhost:8000
+python3 tools/collect_frames.py        # http://localhost:8002, needs ffmpeg
+```
+
+then open each of these and wait for "done" (about a minute each):
+
+- <http://localhost:8000/tools/record.html?format=landscape&post=http://localhost:8002>
+- <http://localhost:8000/tools/record.html?format=portrait&post=http://localhost:8002>
+
+Results: `dist/crazygames-video/preview-landscape-1920x1080.mp4` and `preview-portrait-1080x1620.mp4`
+(H.264, yuv420p BT.709, 30 fps, 18 s, no audio track, about 10 MB each). `&seconds=`, `&seed=` and `&dry=1`
+(no rendering, prints the run log) are there for tuning the choreography in `makeDirector`. In the 2:3 frame
+the score block would collide with the gauges, so only the gauges are shown, and the water-brush scene is
+skipped because the frame cannot show the road that far ahead of the koi.
 
 ## 5. Listing copy
 
