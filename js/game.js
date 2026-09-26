@@ -123,7 +123,7 @@ class Game {
     this.camX = 0; this.elapsed = 0;
     this.distance = 0; this.pearls = 0; this.lotusN = 0; this.combo = 0; this.comboT = 0;
     this.points = 0; this.mult = 1; this.flowM = 0; this.fallT = 0; this.flowPop = 0;
-    this.run = { dist: 0, pearls: 0, combo: 0, rings: 0, leaps: 0, gates: 0, close: 0, flow: 1, lotus: 0, score: 0, form: 0 };
+    this.run = { dist: 0, pearls: 0, combo: 0, rings: 0, leaps: 0, gates: 0, close: 0, flow: 1, lotus: 0, score: 0, form: 0, growth: 0 };
     this.air = { t: 0, from: null, rose: false }; this.wasOnRail = false;
     this.particles.length = 0; this.ripples.length = 0; this.floaters.length = 0; this.purifies.length = 0;
     this.flyers.length = 0; this.stamps.length = 0; this.trail = [];
@@ -589,7 +589,7 @@ class Game {
   // 化: the koi takes its next form, the scroll flares with light, and the world around it blooms
   evolve() {
     const koi = this.koi;
-    if (koi.form >= FORMS.length - 1) return;
+    if (koi.form >= FORMS.length - 1) { this.growDragon(); return; }
     koi.form++; koi.formT = 0; this.run.form = koi.form;
     const f = FORMS[koi.form];
     if (koi.form >= 4) this.mult = Math.max(this.mult, 2);
@@ -601,11 +601,24 @@ class Game {
     this.showBanner({ zh: `化为${f.zh}`, en: `Your koi becomes a ${f.desc || f.en}`, sub: `${f.perkZh} · ${f.perk}`, t: 0, dur: 3, gold: true });
   }
 
+  // 龙身渐长: once a dragon, every gate lengthens it and thickens it, up to DRAGON.MAX_GROWTH
+  growDragon() {
+    const koi = this.koi;
+    if (koi.growth >= DRAGON.MAX_GROWTH) return;
+    koi.growth++; koi.formT = 0; this.run.growth = koi.growth;
+    this.flash = 0.45; koi.glow = 2;
+    this.burst(koi.x, koi.y, 'rgba(236,190,90,', 24);
+    for (let i = 0; i < 5; i++) Audio.pluck(6 + i, 0.28, 0.9 + i * 0.08);
+    Audio.gong(0.3);
+    const full = koi.growth >= DRAGON.MAX_GROWTH;
+    this.showBanner({ zh: full ? '龙身已成' : '龙身渐长', en: full ? 'Your dragon is full-grown' : `Your dragon grows longer · ${koi.growth} of ${DRAGON.MAX_GROWTH}`, t: 0, dur: 2.4, gold: true });
+  }
+
   // 化龙之路: the five forms along the top-left, the next gate's distance, and how far along the koi is
   drawAscent(ctx, x0, y) {
     const koi = this.koi, f = koi.form, seen = Math.max(Progress.data.bestForm || 0, f), gap = 38;
     const next = GATE.FIRST + Math.max(0, Math.ceil((koi.x - GATE.FIRST + 1) / GATE.EVERY)) * GATE.EVERY;
-    const prog = f >= 4 ? 1 : clamp(1 - (next - koi.x) / GATE.EVERY, 0, 1);
+    const prog = f >= 4 ? 1 : clamp(1 - (next - koi.x) / GATE.EVERY, 0, 1); // the dragon's growth is shown in the text line
     ctx.save(); ctx.lineCap = 'round';
     for (let i = 0; i < 4; i++) {
       const a = x0 + 13 + i * gap, b = a + gap;
@@ -625,7 +638,9 @@ class Game {
       ctx.fillText(i <= seen ? FORMS[i].short : '?', x, y + 5.5);
     }
     ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(30,30,40,0.88)';
-    const txt = f >= 4 ? '已化龙 · Ascended' : `化${nextFormLabel(f)} · next gate ${Math.max(0, Math.ceil((next - koi.x) / 10))} 丈`;
+    const toGate = Math.max(0, Math.ceil((next - koi.x) / 10));
+    const txt = f < 4 ? `化${nextFormLabel(f)} · next gate ${toGate} 丈`
+      : koi.growth < DRAGON.MAX_GROWTH ? `龙身渐长 · grows at the next gate, ${toGate} 丈` : '龙身已成 · Full-grown dragon';
     ctx.font = `600 14px ${FONT_TEXT}`; ctx.fillText(txt, x0, y + 32);
     ctx.restore();
   }
@@ -725,8 +740,8 @@ class Game {
     document.getElementById('over-newbest').classList.toggle('on', res.newBest);
     document.getElementById('over-score').textContent = sc;
     document.getElementById('over-dist').textContent = run.dist;
-    document.getElementById('over-form').textContent = FORMS[run.form].zh;
-    document.getElementById('over-form-en').textContent = FORMS[run.form].en;
+    document.getElementById('over-form').textContent = FORMS[run.form].zh + (run.growth ? ` +${run.growth}` : '');
+    document.getElementById('over-form-en').textContent = FORMS[run.form].en + (run.growth ? `, grown ${run.growth}×` : '');
     document.getElementById('over-flow').textContent = '×' + run.flow;
     document.getElementById('over-best').textContent = this.best;
     // the nudge back into the water: how close the record was
