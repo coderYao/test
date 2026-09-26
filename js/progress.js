@@ -29,7 +29,7 @@ const Progress = (() => {
   const fresh = () => ({
     v: 1, runs: 0, dist: 0, pearls: 0, lotus: 0, rings: 0, gates: 0, leaps: 0,
     bestScore: 0, bestDist: 0, bestCombo: 0, bestForm: 0, seals: 0,
-    koi: 'shu', unlocked: ['shu'], seen: ['shu'],
+    koi: 'shu', unlocked: ['shu'],
     goalDay: -1, goals: [], streak: 0, lastDay: -1,
   });
   let d = fresh();
@@ -38,6 +38,7 @@ const Progress = (() => {
     let saved = null;
     try { saved = JSON.parse(Platform.storage.get(KEY) || 'null'); } catch (e) { saved = null; }
     d = Object.assign(fresh(), saved && typeof saved === 'object' ? saved : {});
+    delete d.seen; // an unused field from early builds
     // players from before progress existed keep their best score
     const old = +(Platform.storage.get('moli.best') || 0);
     if (old > d.bestScore) d.bestScore = old;
@@ -54,7 +55,9 @@ const Progress = (() => {
     const m = Object.assign(fresh(), a);
     for (const k of ['runs', 'dist', 'pearls', 'lotus', 'rings', 'gates', 'leaps', 'seals', 'bestScore', 'bestDist', 'bestCombo', 'bestForm']) m[k] = Math.max(a[k] || 0, b[k] || 0);
     m.unlocked = [...new Set([...a.unlocked, ...b.unlocked])];
-    m.koi = m.unlocked.includes(a.koi) ? a.koi : 'shu';
+    // the account's chosen koi, unless the account had no save yet: then the one picked this session
+    const pick = acct && typeof acct === 'object' ? a.koi : b.koi;
+    m.koi = m.unlocked.includes(pick) ? pick : 'shu';
     // streak: the later record wins, but a play on the day after the other record's last day continues its run
     const late = b.lastDay > a.lastDay ? b : a, early = late === b ? a : b;
     m.lastDay = late.lastDay;

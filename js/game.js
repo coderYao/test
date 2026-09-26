@@ -57,7 +57,7 @@ class Game {
     this.stamps = [];   // daily goals met, stamped on screen
     this.brushW = 8;
     this.resize();
-    this.scenery.makePaper(this.ctx);
+    this.scenery.makePaper(this.bctx); // the paper is only ever painted on the background layer
     this.reset();
     this.bindInput();
     window.addEventListener('resize', () => this.resize());
@@ -1281,7 +1281,7 @@ window.addEventListener('load', async () => {
     Progress.adopt();
     const g = window.game; if (!g) return;
     g.best = Progress.data.bestScore;
-    if (g.state === 'title') renderTitleMeta();
+    if (g.state === 'title') { g.koi.kind = Progress.data.koi; renderTitleMeta(); }
   });
   const applyMute = m => { Audio.setDucked(m); syncMuteButton(); };
   applyMute(Platform.muted());
