@@ -41,7 +41,7 @@ function makeDirector(cfg) {
   const g = window.game;
   let rs = cfg.seed >>> 0;                                   // a fixed random stream: every take is identical
   Math.random = () => ((rs = (Math.imul(rs, 1664525) + 1013904223) >>> 0) / 4294967296);
-  g.seed = cfg.seed; g.scenery = new Scenery(cfg.seed); g.scenery.makePaper(g.ctx); g.resize();
+  g.seed = cfg.seed; g.scenery = new Scenery(cfg.seed); g.scenery.makePaper(g.ctx); g.q = 0; g.resize();   // full quality, whatever this machine's governor chose
   g.loop = () => {};                                         // we drive update() and render() ourselves
   g.beginRun(); g.best = 0;
   g.drewOnce = true; g.waterHintShown = true;                // no tutorial hints: a preview shows play, not instructions
@@ -135,7 +135,7 @@ function makeDirector(cfg) {
   return {
     tick,
     render: () => g.render(),
-    canvas: document.getElementById('game'),
+    composite: (c, w, h) => g.composite(c, w, h),
     sample: t => log.push(`${t.toFixed(1)}s x=${g.koi.x.toFixed(0)} y=${g.koi.y.toFixed(0)} v=${g.koi.speed().toFixed(0)} rail=${g.koi.rail ? 'y' : '-'} ink=${g.ink.toFixed(2)} spirit=${g.koi.vitality.toFixed(2)} pearls=${g.pearls} lotus=${g.lotusN} pen=${pen.mode} state=${g.state} washInk=${g.field.sample(WASH.x, WASH.y).toFixed(2)}`),
     log, state: () => g.state,
   };
@@ -181,7 +181,7 @@ async function coverImage() {
     if (n % FPS === 0) d.sample(t);
     if (!DRY) {
       d.render();
-      ctx.globalAlpha = 1; ctx.drawImage(d.canvas, 0, 0, SIZE.w, SIZE.h);
+      ctx.globalAlpha = 1; d.composite(ctx, SIZE.w, SIZE.h);
       const a = 1 - (t - COVER_HOLD) / COVER_FADE;
       if (a > 0) { ctx.globalAlpha = Math.min(1, a); ctx.drawImage(cover, 0, 0, SIZE.w, SIZE.h); ctx.globalAlpha = 1; }
       if (POST) {
