@@ -36,9 +36,8 @@ const loadQuality = () => { try { return clamp((+localStorage.getItem('moli.qual
 // Pixel budgets for the two layers, before the quality level scales them. Played full screen on a large retina display
 // (as portals invite), the front layer alone would be 6 to 15 million pixels a frame; past these, sharpness gives way first.
 const FG_PIXELS = 4.2e6, BG_PIXELS = 2.2e6;
-// On a 120 or 144 Hz display the game draws every other refresh. A steady 60 or 72 fps paces better than a ragged 100,
-// for half the work, and a scroll of ink gains nothing from more. It draws every n-th refresh, n being the refresh rate
-// over DRAW_HZ rounded down: 120 Hz gives 60 fps, 144 gives 72, 240 gives 60, and anything under ~117 Hz draws every one.
+// Frame pacing (see pacing()): the game draws every refresh while it keeps up. On a display fast enough to spare some
+// (120, 144 Hz), a game that misses refreshes draws every n-th instead, but never by choice below about DRAW_HZ fps.
 const DRAW_HZ = 60;
 // the frame-rate governor steps resolution down while play is slower than this
 const SLOW_FPS = 54;
@@ -56,6 +55,7 @@ class Game {
     this.time = 0; this.last = performance.now();
     // recent intervals between frame callbacks, and a scratch copy for sorting them
     this.rafT = 0; this.gaps = new Float64Array(30).fill(1000 / 60); this.gapSort = new Float64Array(30); this.gapI = 0;
+    this.pace = { every: 1, miss: 0, calm: 0, retry: 4000 };   // draw every n-th refresh; see pacing()
     this.pointer = { x: 0, y: 0, down: false, type: 'mouse', sx: 0, sy: 0, ts: 0, inside: false };
     this.tip = { x: 0, y: 0 }; this.pSpeed = 0;
     this.waterHold = false; this.waterToggle = false;
@@ -358,17 +358,31 @@ class Game {
 
   award(pts, flat) { const v = flat ? pts : pts * this.mult; this.points += v; if (v >= 10) this.scorePop = 0.3; return Math.round(v); }
 
+  // Frame pacing. The game draws every refresh while it keeps up. When it misses refreshes on a display fast enough to
+  // spare them (120, 144 Hz), it draws every other one instead: a steady 60 or 72 fps paces better than a ragged 100, for
+  // less work. After a quiet spell it tries the full rate again, waiting twice as long each time that fails.
+  pacing(ms, vsync) {
+    const p = this.pace, most = Math.max(1, Math.floor(1000 / vsync / DRAW_HZ + 0.05));
+    if (ms > 120) return;   // a stall (tab switch, alert), not a frame rate
+    p.miss += ((ms > (p.every + 0.5) * vsync ? 1 : 0) - p.miss) * 0.05;   // share of recent frames that came late
+    p.calm += ms;
+    if (p.every < most && p.miss > 0.15) { p.every++; p.miss = 0; p.calm = 0; p.retry = Math.min(60000, p.retry * 2); }
+    else if (p.every > 1 && p.calm > p.retry) { p.every--; p.miss = 0; p.calm = 0; }
+    p.every = Math.min(p.every, most);
+  }
+
   // ---------- update ----------
   loop(now) {
     requestAnimationFrame(t => this.loop(t));
-    // the refresh interval: the median of recent gaps between callbacks, which shrugs off slow frames and timestamps
-    // that jitter or are rounded to the millisecond (as some browsers do). Skipped callbacks cost nothing and arrive on time.
+    // the refresh interval: the lower quartile of recent gaps between callbacks. A late frame only makes a gap longer,
+    // so this holds while most frames are late, and a clock that jitters or rounds to the millisecond (as some browsers'
+    // do) only nudges it, which pacing() tolerates: it bounds how far pacing may step down, never forces it.
     const gap = now - this.rafT; this.rafT = now;
     if (gap > 1) this.gaps[this.gapI++ % this.gaps.length] = gap;
     const sorted = this.gapSort; sorted.set(this.gaps); sorted.sort();
-    const vsync = sorted[sorted.length >> 1];
-    const every = Math.max(1, Math.floor(1000 / vsync / DRAW_HZ + 0.05));
-    if (now - this.last < (every - 0.5) * vsync) return;
+    const vsync = sorted[sorted.length >> 2];
+    if (now - this.last < (this.pace.every - 0.5) * vsync) return;
+    this.pacing(now - this.last, vsync);
     let dt = (now - this.last) / 1000; this.last = now;
     this.watchFrames(dt * 1000);
     if (dt > 0.05) dt = 0.05;
