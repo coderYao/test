@@ -37,8 +37,9 @@ const loadQuality = () => { try { return clamp((+localStorage.getItem('moli.qual
 // (as portals invite), the front layer alone would be 6 to 15 million pixels a frame; past these, sharpness gives way first.
 const FG_PIXELS = 4.2e6, BG_PIXELS = 2.2e6;
 // On a 120 or 144 Hz display the game draws every other refresh. A steady 60 or 72 fps paces better than a ragged 100,
-// for half the work, and a scroll of ink gains nothing from more. Refresh rates up to ~105 Hz draw every frame.
-const MIN_FRAME_MS = 9.5;
+// for half the work, and a scroll of ink gains nothing from more. It draws every n-th refresh, n being the refresh rate
+// over DRAW_HZ rounded down: 120 Hz gives 60 fps, 144 gives 72, 240 gives 60, and anything under ~117 Hz draws every one.
+const DRAW_HZ = 60;
 // the frame-rate governor steps resolution down while play is slower than this
 const SLOW_FPS = 54;
 
@@ -53,6 +54,8 @@ class Game {
     this.scenery = new Scenery(this.seed);
     this.state = 'title';
     this.time = 0; this.last = performance.now();
+    // recent intervals between frame callbacks, and a scratch copy for sorting them
+    this.rafT = 0; this.gaps = new Float64Array(30).fill(1000 / 60); this.gapSort = new Float64Array(30); this.gapI = 0;
     this.pointer = { x: 0, y: 0, down: false, type: 'mouse', sx: 0, sy: 0, ts: 0, inside: false };
     this.tip = { x: 0, y: 0 }; this.pSpeed = 0;
     this.waterHold = false; this.waterToggle = false;
@@ -77,12 +80,19 @@ class Game {
     requestAnimationFrame(t => this.loop(t));
   }
 
-  resize() {
-    const Q = QUALITY[this.q], dev = window.devicePixelRatio || 1;
+  // the layout, and each canvas's device pixels per CSS pixel, at quality level q: the device's, within the pixel budgets,
+  // scaled by the level, and never below a floor (so where the budgets and floors bind, neighbouring levels coincide)
+  res(q) {
+    const Q = QUALITY[q], dev = window.devicePixelRatio || 1;
     // a hidden or zero-size frame reports 0x0; lay out for a nominal size until a real resize arrives
     const W = window.innerWidth || 1280, H = window.innerHeight || 720;
     const fit = pixels => Math.sqrt(pixels / (W * H));
     const dpr = Math.max(0.75, Math.min(2, dev, fit(FG_PIXELS)) * Q.fg), bdpr = Math.max(0.5, Math.min(1, dev, fit(BG_PIXELS)) * Q.bg);
+    return { W, H, dpr, bdpr, size: [W * dpr, H * dpr, W * bdpr, H * bdpr].map(Math.round).join() };
+  }
+
+  resize() {
+    const { W, H, dpr, bdpr } = this.res(this.q);
     this.canvas.width = Math.round(W * dpr); this.canvas.height = Math.round(H * dpr);
     this.canvas.style.width = W + 'px'; this.canvas.style.height = H + 'px';
     this.bgCanvas.width = Math.round(W * bdpr); this.bgCanvas.height = Math.round(H * bdpr);
@@ -113,8 +123,13 @@ class Game {
       try { localStorage.setItem('moli.quality', String(this.q)); } catch (e) { /* private mode */ }
     }
     if (mean > 1000 / SLOW_FPS && this.q < QUALITY.length - 1) {
+      // the next level that changes the canvases; if none does, there is nothing left to try
+      const now = this.res(this.q).size;
+      let q = this.q + 1;
+      while (q < QUALITY.length && this.res(q).size === now) q++;
+      if (q === QUALITY.length) { this.qDone = true; return; }
       this.qTrial = { from: this.q, mean };
-      this.q++; log.length = 0; this.qCool = 2;
+      this.q = q; log.length = 0; this.qCool = 2;
       this.resize();
     }
   }
@@ -346,7 +361,14 @@ class Game {
   // ---------- update ----------
   loop(now) {
     requestAnimationFrame(t => this.loop(t));
-    if (now - this.last < MIN_FRAME_MS) return;
+    // the refresh interval: the median of recent gaps between callbacks, which shrugs off slow frames and timestamps
+    // that jitter or are rounded to the millisecond (as some browsers do). Skipped callbacks cost nothing and arrive on time.
+    const gap = now - this.rafT; this.rafT = now;
+    if (gap > 1) this.gaps[this.gapI++ % this.gaps.length] = gap;
+    const sorted = this.gapSort; sorted.set(this.gaps); sorted.sort();
+    const vsync = sorted[sorted.length >> 1];
+    const every = Math.max(1, Math.floor(1000 / vsync / DRAW_HZ + 0.05));
+    if (now - this.last < (every - 0.5) * vsync) return;
     let dt = (now - this.last) / 1000; this.last = now;
     this.watchFrames(dt * 1000);
     if (dt > 0.05) dt = 0.05;

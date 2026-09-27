@@ -109,8 +109,10 @@ class Scenery {
     if (p > 0.57 && p < 0.99) this.drawMoon(ctx, W, H, (p - 0.57) / 0.42);
     // mountain layers back to front: the still parts from their cached strips, then what moves
     const season = this.seasonIndex(camX + W * 0.5), k = this.k;
+    let wait = false;   // one season repaint per frame: a turning season costs a few ordinary frames, not one long one
     for (let L = 0; L < LAYERS.length; L++) {
-      const ox = camX * LAYERS[L].par, s = this.layerStrip(L, ox, W, H, season);
+      const ox = camX * LAYERS[L].par, s = this.layerStrip(L, ox, W, H, season, wait);
+      wait = wait || s.painted;
       ctx.drawImage(s.cv, s.px0 / k - ox, s.top, s.cv.width / k, s.cv.height / k);
       this.drawLiveDecorations(ctx, L, ox, W, season, time);
     }
@@ -291,18 +293,25 @@ class Scenery {
   // frame's cost. So each layer's still parts are painted once into a strip a little wider than the screen, in the
   // layer's own coordinates, and the strip is drawn at the layer's parallax offset. When the scroll nears the strip's
   // right edge, the strip slides its pixels left by a whole number of device pixels and paints only the columns that
-  // came into view: the same shapes land on the same pixel grid, so the seam is invisible. A new season repaints it.
-  layerStrip(L, ox, W, H, season) {
+  // came into view: the same shapes land on the same pixel grid, so the seam is invisible. A new season repaints it,
+  // unless wait is set: then a strip that has something to show keeps its old season a frame longer. s.painted tells
+  // the caller whether this call repainted the whole strip.
+  layerStrip(L, ox, W, H, season, wait) {
     const k = this.k, top = LAYERS[L].base - LAYERS[L].amp - LAYERS[L].sky;
     const pw = Math.ceil((W + 24 + STRIP_SLACK) * k), ph = Math.ceil((H + 10 - top) * k);
     let s = this.strips[L];
     if (!s || s.cv.width !== pw || s.cv.height !== ph) {
       const cv = document.createElement('canvas'); cv.width = pw; cv.height = ph;
-      s = this.strips[L] = { cv, c: cv.getContext('2d'), top, px0: 0, season: -1 };
+      const strip = { cv, c: cv.getContext('2d'), top, px0: 0, season: -1, painted: false };
+      // a canvas whose GPU context was lost comes back blank, and slides only ever paint slivers: start it afresh
+      cv.addEventListener('contextrestored', () => { strip.season = -1; });
+      s = this.strips[L] = strip;
     }
+    season = Scenery.stripSeason(L, season);
     // px0: the device column, in layer coordinates times k, of the strip's left edge (an integer, so slides stay on the grid)
     const want = Math.floor((ox - 12) * k), shift = want - s.px0;
-    if (s.season !== season || shift < 0 || shift >= pw) {
+    s.painted = s.season < 0 || s.season !== season && !wait || shift < 0 || shift >= pw;
+    if (s.painted) {
       s.px0 = want; s.season = season;
       this.paintStrip(s, L, 0, pw, H);
     } else if ((ox + W + 12) * k > s.px0 + pw) {
@@ -316,6 +325,11 @@ class Scenery {
     }
     return s;
   }
+
+  // The season as a layer's still parts show it, so a strip is only repainted when it would look different: paintLayer
+  // puts winter snow on the ridges and pines of the middle and near layers, and only the near layer has plum trees, in
+  // blossom in spring and red-leaved in autumn. The far layer looks the same all year.
+  static stripSeason(L, season) { return L === 0 ? 0 : L === 1 ? (season === 3 ? 3 : 0) : season; }
 
   // paint device columns c0..c1 of a strip
   paintStrip(s, L, c0, c1, H) {
@@ -370,12 +384,11 @@ class Scenery {
     // trees and buildings
     const a1 = p.alpha * 1.6;
     this.eachDecoration(L, x0 - 150, x1 + 150, d => {
-      const gy = this.ridge(L, d.x);
       switch (d.t) {
-        case 'pine': this.pine(ctx, d.x, gy, d.s * (L === 2 ? 1 : 0.6), a1, d.k, season); break;
-        case 'plum': this.plum(ctx, d.x, gy, d.s, a1, d.k, season); break;
-        case 'pagoda': this.pagoda(ctx, d.x, gy, d.s, a1); break;
-        case 'hut': this.hut(ctx, d.x, gy, d.s, a1); break;
+        case 'pine': this.pine(ctx, d.x, d.gy, d.s * (L === 2 ? 1 : 0.6), a1, d.k, season); break;
+        case 'plum': this.plum(ctx, d.x, d.gy, d.s, a1, d.k, season); break;
+        case 'pagoda': this.pagoda(ctx, d.x, d.gy, d.s, a1); break;
+        case 'hut': this.hut(ctx, d.x, d.gy, d.s, a1); break;
       }
     });
   }
@@ -386,10 +399,10 @@ class Scenery {
     this.eachDecoration(L, ox - 150, ox + W + 150, d => {
       const sx = d.x - ox;
       switch (d.t) {
-        case 'bamboo': this.bamboo(ctx, sx, this.ridge(L, d.x), d, a, time, season); break;
+        case 'bamboo': this.bamboo(ctx, sx, d.gy, d, a, time, season); break;
         case 'birds': this.birds(ctx, sx, d.y, d.n, d.s, a, time); break;
-        case 'pagoda': this.glowAt(ctx, sx, this.ridge(L, d.x) - 30 * d.s, 12 * d.s); break;
-        case 'hut': this.glowAt(ctx, sx, this.ridge(L, d.x) - 8 * d.s, 16 * d.s); break;
+        case 'pagoda': this.glowAt(ctx, sx, d.gy - 30 * d.s, 12 * d.s); break;
+        case 'hut': this.glowAt(ctx, sx, d.gy - 8 * d.s, 16 * d.s); break;
       }
     });
   }
@@ -422,6 +435,7 @@ class Scenery {
       }
       if (rng() < 0.18) d.push({ t: 'hut', x: ci * CH + rng() * CH, s: 0.9 + rng() * 0.3 });
     }
+    for (const e of d) if (e.t !== 'birds') e.gy = this.ridge(L, e.x);   // where it stands: the ridge under it never moves
     this.decoCache.set(key, d);
     return d;
   }
