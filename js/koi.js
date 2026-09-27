@@ -36,6 +36,48 @@ function koiWidth(t) {
 function dragonWidth(t) { return t < 0.18 ? 0.72 + 0.28 * smoothstep(0, 0.18, t) : lerp(1, 0.22, Math.pow(smoothstep(0.55, 1, t), 1.1)); }
 // after becoming a dragon, every further gate makes it grow: more body segments (longer) and a heavier build
 const DRAGON = { SEGS: 22, SEGS_PER_GROWTH: 5, MAX_GROWTH: 8 };
+
+// A frame along a painted spine, shared by the koi and dragon painters and kept between frames so a long dragon
+// doesn't allocate hundreds of points a frame: tangent toward the tail (T), normal (Nn), half-width (hw), both edges.
+const setXY = (arr, i, x, y) => { const p = arr[i]; if (p) { p.x = x; p.y = y; } else arr[i] = { x, y }; };
+class SpineFrame {
+  constructor() { this.sp = null; this.T = []; this.Nn = []; this.hw = []; this.left = []; this.right = []; }
+  build(sp, widthAt, W) {
+    const N = sp.length; this.sp = sp;
+    for (let i = 0; i < N; i++) {
+      const a = sp[Math.max(0, i - 1)], b = sp[Math.min(N - 1, i + 1)];
+      let tx = b.x - a.x, ty = b.y - a.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+      const w = widthAt(i / (N - 1)) * W;
+      setXY(this.T, i, tx, ty); setXY(this.Nn, i, -ty, tx); this.hw[i] = w;
+      setXY(this.left, i, sp[i].x - ty * w, sp[i].y + tx * w); setXY(this.right, i, sp[i].x + ty * w, sp[i].y - tx * w);
+    }
+    this.T.length = this.Nn.length = this.hw.length = this.left.length = this.right.length = N;
+    return this;
+  }
+  // a point on the body: t along it (0 head .. 1 tail), o across it (-1..1 of the half-width)
+  at(t, o) {
+    const sp = this.sp, N = sp.length, fi = clamp(t, 0, 1) * (N - 1), i = Math.min(N - 2, Math.floor(fi)), f = fi - i;
+    const w = lerp(this.hw[i], this.hw[i + 1], f), n = this.Nn[i];
+    return { x: lerp(sp[i].x, sp[i + 1].x, f) + n.x * o * w, y: lerp(sp[i].y, sp[i + 1].y, f) + n.y * o * w, i };
+  }
+  // the outline, rounded at the tail; with `snout` the front is rounded too (the koi), else it closes flat (the dragon's head covers it)
+  trace(ctx, tailCap, snout) {
+    const { sp, T, hw, left, right } = this, N = sp.length;
+    ctx.beginPath(); ctx.moveTo(left[0].x, left[0].y);
+    for (let i = 1; i < N; i++) { const p = left[i - 1], q = left[i]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2); }
+    const e = sp[N - 1];
+    ctx.quadraticCurveTo(e.x + T[N - 1].x * hw[N - 1] * tailCap, e.y + T[N - 1].y * hw[N - 1] * tailCap, right[N - 1].x, right[N - 1].y);
+    for (let i = N - 1; i >= 1; i--) { const p = right[i], q = right[i - 1]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2); }
+    ctx.lineTo(right[0].x, right[0].y);
+    if (snout) {
+      // a blunt, rounded snout
+      const h = sp[0], hx = -T[0].x, hy = -T[0].y, r0 = hw[0], fx = h.x + hx * r0 * 1.15, fy = h.y + hy * r0 * 1.15;
+      ctx.quadraticCurveTo(right[0].x + hx * r0 * 0.95, right[0].y + hy * r0 * 0.95, fx, fy);
+      ctx.quadraticCurveTo(left[0].x + hx * r0 * 0.95, left[0].y + hy * r0 * 0.95, left[0].x, left[0].y);
+    }
+    ctx.closePath();
+  }
+}
 const KOI_ORDER = ['shu', 'kohaku', 'tancho', 'asagi', 'showa', 'ogon', 'sumi'];
 
 // 鲤跃龙门: every dragon gate passed in a run carries the koi one form closer to a dragon.
@@ -211,9 +253,11 @@ class Koi {
     const hx0 = this.x + this.ox, hy0 = this.y + this.oy;
     const P = this.path, last = P[P.length - 1];
     if (!last || Math.hypot(hx0 - last.x, hy0 - last.y) > 2) P.push({ x: hx0, y: hy0 });
-    // forget path older than the body is long
+    // forget path older than the longest body this koi could grow into, so becoming or growing a dragon mid-curve
+    // lays the new length along the path it really swam rather than straight out behind
+    const keep = Math.max(len, 5 * this.size * (1.2 + 0.03 * DRAGON.MAX_GROWTH) * (DRAGON.SEGS + DRAGON.SEGS_PER_GROWTH * DRAGON.MAX_GROWTH - 1)) + 20;
     let acc = Math.hypot(hx0 - P[P.length - 1].x, hy0 - P[P.length - 1].y), cut = 0;
-    for (let i = P.length - 1; i > 0; i--) { acc += Math.hypot(P[i].x - P[i - 1].x, P[i].y - P[i - 1].y); if (acc > len + 20) { cut = i - 1; break; } }
+    for (let i = P.length - 1; i > 0; i--) { acc += Math.hypot(P[i].x - P[i - 1].x, P[i].y - P[i - 1].y); if (acc > keep) { cut = i - 1; break; } }
     if (cut > 0) P.splice(0, cut);
     // sample the path back from the head at even spacing; beyond its end, continue straight behind the heading
     const base = [{ x: hx0, y: hy0 }];
@@ -259,37 +303,11 @@ class Koi {
     const tone = (c, a, k = 1) => { const m = mix(c, k); return `rgba(${m[0] | 0},${m[1] | 0},${m[2] | 0},${a * fade})`; };
     const lum = (K.body[0] + K.body[1] + K.body[2]) / 3, pale = lum > 180, dark = lum < 70;
     ctx.save(); ctx.translate(-camX, 0);
-    // a frame along the spine: tangent toward the tail, normal, half-width
-    const T = [], Nn = [], hw = [], left = [], right = [];
-    for (let i = 0; i < N; i++) {
-      const a = sp[Math.max(0, i - 1)], b = sp[Math.min(N - 1, i + 1)];
-      let tx = b.x - a.x, ty = b.y - a.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
-      T.push({ x: tx, y: ty }); Nn.push({ x: -ty, y: tx });
-      hw.push(koiWidth(i / (N - 1)) * W);
-      left.push({ x: sp[i].x - ty * hw[i], y: sp[i].y + tx * hw[i] });
-      right.push({ x: sp[i].x + ty * hw[i], y: sp[i].y - tx * hw[i] });
-    }
+    const fr = (this.frame || (this.frame = new SpineFrame())).build(sp, koiWidth, W);
+    const { T, Nn, hw } = fr;
     const hx = -T[0].x, hy = -T[0].y, h = sp[0];
-    // a point on the body: t along it (0 snout .. 1 tail), o across it (-1..1 of the half-width)
-    const at = (t, o) => {
-      const fi = clamp(t, 0, 1) * (N - 1), i = Math.min(N - 2, Math.floor(fi)), f = fi - i;
-      const w = lerp(hw[i], hw[i + 1], f), n = Nn[i];
-      return { x: lerp(sp[i].x, sp[i + 1].x, f) + n.x * o * w, y: lerp(sp[i].y, sp[i + 1].y, f) + n.y * o * w, i };
-    };
-    const body = () => {
-      ctx.beginPath();
-      ctx.moveTo(left[0].x, left[0].y);
-      for (let i = 1; i < N; i++) { const p = left[i - 1], q = left[i]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2); }
-      const e = sp[N - 1], tx = T[N - 1].x, ty = T[N - 1].y;
-      ctx.quadraticCurveTo(e.x + tx * hw[N - 1] * 1.4, e.y + ty * hw[N - 1] * 1.4, right[N - 1].x, right[N - 1].y);
-      for (let i = N - 1; i >= 1; i--) { const p = right[i], q = right[i - 1]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2); }
-      ctx.lineTo(right[0].x, right[0].y);
-      // a blunt, rounded snout
-      const r0 = hw[0], fx = h.x + hx * r0 * 1.15, fy = h.y + hy * r0 * 1.15;
-      ctx.quadraticCurveTo(right[0].x + hx * r0 * 0.95, right[0].y + hy * r0 * 0.95, fx, fy);
-      ctx.quadraticCurveTo(left[0].x + hx * r0 * 0.95, left[0].y + hy * r0 * 0.95, left[0].x, left[0].y);
-      ctx.closePath();
-    };
+    const at = (t, o) => fr.at(t, o);
+    const body = () => fr.trace(ctx, 1.4, true);
     const rot = (v, a) => { const c = Math.cos(a), sn = Math.sin(a); return { x: v.x * c - v.y * sn, y: v.x * sn + v.y * c }; };
     const norm = v => { const l = Math.hypot(v.x, v.y) || 1; return { x: v.x / l, y: v.y / l }; };
     // a translucent fin: a fan from its root between two edge directions, with rays
@@ -543,37 +561,21 @@ class Koi {
     // flames (mane, elbows, tail) lean toward gold so they stand out from any body colour
     const flameC = [lerp(K.fin[0], 240, 0.55), lerp(K.fin[1], 178, 0.55), lerp(K.fin[2], 80, 0.55)];
     ctx.save(); ctx.translate(-camX, 0); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // frame along the spine
-    const T = [], Nn = [], hw = [], left = [], right = [];
-    for (let i = 0; i < N; i++) {
-      const a = sp[Math.max(0, i - 1)], b = sp[Math.min(N - 1, i + 1)];
-      let tx = b.x - a.x, ty = b.y - a.y; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
-      T.push({ x: tx, y: ty }); Nn.push({ x: -ty, y: tx });
-      hw.push(dragonWidth(i / (N - 1)) * W);
-      left.push({ x: sp[i].x - ty * hw[i], y: sp[i].y + tx * hw[i] });
-      right.push({ x: sp[i].x + ty * hw[i], y: sp[i].y - tx * hw[i] });
-    }
+    const fr = (this.frame || (this.frame = new SpineFrame())).build(sp, dragonWidth, W);
+    const { T, Nn, hw } = fr;
     const hx = -T[0].x, hy = -T[0].y, H = sp[0];
-    const at = (t, o) => {
-      const fi = clamp(t, 0, 1) * (N - 1), i = Math.min(N - 2, Math.floor(fi)), f = fi - i;
-      const w = lerp(hw[i], hw[i + 1], f), n = Nn[i];
-      return { x: lerp(sp[i].x, sp[i + 1].x, f) + n.x * o * w, y: lerp(sp[i].y, sp[i + 1].y, f) + n.y * o * w, i };
-    };
+    const at = (t, o) => fr.at(t, o);
     // head space: u forward, v to the side, in units of s
     const hs = s * 1.35, hp = (u, v) => ({ x: H.x + (hx * u - hy * v) * hs, y: H.y + (hy * u + hx * v) * hs });
-    const body = () => {
-      ctx.beginPath(); ctx.moveTo(left[0].x, left[0].y);
-      for (let i = 1; i < N; i++) { const p = left[i - 1], q = left[i]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2); }
-      const e = sp[N - 1]; ctx.quadraticCurveTo(e.x + T[N - 1].x * hw[N - 1] * 1.5, e.y + T[N - 1].y * hw[N - 1] * 1.5, right[N - 1].x, right[N - 1].y);
-      for (let i = N - 1; i >= 1; i--) { const p = right[i], q = right[i - 1]; ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2); }
-      ctx.lineTo(right[0].x, right[0].y); ctx.closePath();
-    };
+    const body = () => fr.trace(ctx, 1.5, false);
     // a tapering flame tongue from a root along a direction, bending as it goes
-    const flame = (x, y, dx, dy, len, wid, bend, a, col = flameC, k = 1) => {
+    const flame = (x, y, dx, dy, len, wid, bend, a, col = flameC, k = 1, fade2 = false) => {
       const nx = -dy, ny = dx, tx = x + dx * len + nx * bend, ty = y + dy * len + ny * bend;
-      const gr = ctx.createLinearGradient(x, y, tx, ty);
-      gr.addColorStop(0, tone(col, 0.95 * a, k)); gr.addColorStop(1, tone(col, 0.2 * a, k));
-      ctx.fillStyle = gr;
+      if (fade2) {
+        const gr = ctx.createLinearGradient(x, y, tx, ty);
+        gr.addColorStop(0, tone(col, 0.95 * a, k)); gr.addColorStop(1, tone(col, 0.2 * a, k));
+        ctx.fillStyle = gr;
+      } else ctx.fillStyle = tone(col, 0.72 * a, k);
       ctx.beginPath(); ctx.moveTo(x + nx * wid, y + ny * wid);
       ctx.quadraticCurveTo(x + dx * len * 0.55 + nx * (wid + bend * 0.8), y + dy * len * 0.55 + ny * (wid + bend * 0.8), tx, ty);
       ctx.quadraticCurveTo(x + dx * len * 0.5 + nx * bend * 0.2, y + dy * len * 0.5 + ny * bend * 0.2, x - nx * wid, y - ny * wid);
@@ -595,7 +597,7 @@ class Koi {
     for (let k = -2; k <= 2; k++) {
       const a = k * 0.28 + Math.sin(this.phase * 1.3 - 1.5 + k) * 0.18, c = Math.cos(a), sn = Math.sin(a);
       const dx = tb.x * c - tb.y * sn, dy = tb.x * sn + tb.y * c;
-      flame(E.x, E.y, dx, dy, (24 - Math.abs(k) * 4) * s * (1 + 0.05 * g), 2.4 * s, Math.sin(this.phase * 1.7 + k) * 5 * s, 1);
+      flame(E.x, E.y, dx, dy, (24 - Math.abs(k) * 4) * s * (1 + 0.05 * g), 2.4 * s, Math.sin(this.phase * 1.7 + k) * 5 * s, 1, flameC, 1, true);
     }
     // four legs, striding in turn: shoulder, elbow with a tuft of flame, a foot of four claws
     for (const [t, ph] of [[0.2, 0], [0.56, 1.7]]) {
