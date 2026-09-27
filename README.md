@@ -31,7 +31,7 @@ Most ink-style games use ink as a *look*. Here the physical behaviour of ink is 
 - **Pickups do something.** Each 墨珠 (ink pearl) refills the inkstone and gives the koi a surge of speed along its current, bigger with every pearl in an unbroken run (连珠), so threading a whole arc of pearls is a slingshot. A 莲 (lotus) restores spirit and water, sends a ring of clear water outward that washes away every ink blot within 260 px, and makes the ink tide ebb 300 px, rest for two seconds, then creep back.
 - **The ink tide.** A wall of black ink follows from the left and speeds up with distance. Stalling is fatal.
 - **流势 Flow.** Riding, leaping between strokes (鲤跃), threading 圆相 ensō rings and slipping past hooks by a whisker (险) all build a flow multiplier, up to ×5, shown as an ensō that fills beside the gauges. Every point you score is multiplied by it. Sinking for more than a second drops it a level; a hook resets it.
-- **龙门 Dragon Gates.** Every 300 丈 a great vermilion ensō hangs over the scroll (an arrow at the right edge points to the next one). Swim through it and the inkstone, water and spirit refill, the flow rises a level, the tide falls back, and the koi evolves.
+- **龙门 Dragon Gates.** At 260 丈, then every 450 丈, a great vermilion ensō hangs over the scroll (an arrow at the right edge points to the next one). Swim through it and the inkstone, water and spirit refill, the flow rises a level, the tide falls back, and the koi evolves.
 - **鲤跃龙门: the koi becomes a dragon.** As in the legend, each gate carries the koi one form further, and each form looks grander and brings a perk:
 
   | Gates | Form | Looks | Perk |
@@ -40,7 +40,8 @@ Most ink-style games use ink as a *look*. Here the physical behaviour of ink is 
   | 1 | 锦鲤 Brocade Koi | gold rim, gold-glinting scales | ink refills faster |
   | 2 | 灵鲤 Spirit Koi | long silk tail with streamers, a halo, trailing sparks | pearls drift toward you |
   | 3 | 蛟 Jiao | antlers, a flame-like crest, long whiskers | thick ink hurts less |
-  | 4 | 龙 Dragon | long serpentine body, four clawed legs, golden antlers, cloud wisps | glides off a current; flow never falls below ×2 |
+  | 4 | 龙 Dragon | a true 龙: horned, whiskered head with a flame mane, serpentine scaled body under a crest of spines, four clawed legs, a flame tail, and the flaming pearl it chases | glides off a current; flow never falls below ×2 |
+  | 5+ | 龙 +N | every further gate makes the dragon longer and heavier, up to 8 times (about four times its first length) | the same |
 
   The five forms sit in a row under the gauges with the distance to the next gate. Forms you have never reached show as ?, on the HUD and on the title scroll.
 - **The world changes as you go.** One day passes over every 900 丈: dawn with a red sun, day, golden hour, dusk, then a starlit night with a moon, fireflies and lamps lit in the huts and pagodas, and dawn again. Each form the koi takes adds a layer of wonder to the sky: golden motes, then sky lanterns rising, then auspicious 祥云 clouds, then red-crowned cranes and shafts of light.

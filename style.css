@@ -108,7 +108,6 @@ button.link:hover { background: rgba(30,30,40,.08); color: #1e1e28; }
 .unlock.new { border-color: #b83228; background: rgba(184,50,40,.06); animation: popin .5s cubic-bezier(.2,1.6,.4,1) both .3s; }
 @keyframes popin { from { transform: scale(1.25); opacity: 0 } to { transform: scale(1); opacity: 1 } }
 .over-panel { width: 600px; }
-}
 @media (max-width: 620px) { .over-meta { grid-template-columns: 1fr; gap: 8px; } }
 
 /* the game-over card carries progress now: tighten it on anything shorter than a tall laptop */
@@ -118,6 +117,7 @@ button.link:hover { background: rgba(30,30,40,.08); color: #1e1e28; }
   .tip { margin-top: 8px; padding: 6px 12px; } .score { font-size: 70px; } .scorebox { margin: 8px 0 10px; }
   .stats { margin-bottom: 12px; } .stats > div { padding: 6px 4px 5px; } .stats dd { font-size: 26px; }
   .over-meta { margin-bottom: 12px; } .over-panel .keys { display: none; }
+}
 
 /* laptop-height viewports: the bilingual card is ~630px tall single-column, so go two-up before it clips */
 @media (max-height: 700px) {

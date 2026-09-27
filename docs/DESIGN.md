@@ -50,7 +50,7 @@ Why it won:
 - Flow: riding adds 0.07/s, a pearl 0.06, a ring 0.3, a leap 0.22, a close call 0.2, a caught fall 0.05; each level needs (0.6 + 0.4 × level) of that. Sinking (vy > 150) for 1 s drops a level, a hook resets to ×1, thick ink drains the meter. Max ×5.
 - A leap is at least 0.4 s airborne between two different strokes, rising at some point. A close call is passing within 44 px of a hook without being hit.
 - Score: distance / 10 × flow, pearl 10 × flow, ring 30 × flow, leap (15 + 20 × airtime) × flow, close call 25 × flow, gate 300 × flow, lotus 50.
-- Dragon gates at 2600 px and every 3000 px after, radius 84, with clouds, hooks and lotus kept 240 px away and four pearls leading in. Ensō rings: 60% of chunks from chunk 2, radius 44 to 56; they count if the koi crosses the centre line within 85% of the radius.
+- Dragon gates at 2600 px and every 4500 px after (260, 710, 1,160, 1,610 丈 ...), radius 84, with clouds, hooks and lotus kept 240 px away and four pearls leading in. Ensō rings: 60% of chunks from chunk 2, radius 44 to 56; they count if the koi crosses the centre line within 85% of the radius.
 
 ## Retention design
 
@@ -60,5 +60,5 @@ The core loop was strong but every run ended the same way: a number, then nothin
 - **A reason for one more run**: the game-over card names the gap to your best score when it is within 40%, and shows the next koi with a progress bar.
 - **A reason to come back tomorrow**: three daily goals (gentle, medium, stretch, the same for everyone that day) and a streak counter. The last koi, 墨龙, is earned only through daily goals.
 - **First unlocks come fast**: Kohaku at 1,000 丈 in total is usually the second or third run; later ones ask for skill (an ×8 combo, three gates, 3,000 in one run).
-- **Evolution inside a run** answers "why keep going?" with something to see, not just a bigger number: the next form (shown as ? until first reached) is always one gate away, and the HUD counts down the 丈 to it. Gates fall at 260, 560, 860 and 1,160 丈, about every 30 to 40 seconds of good play. The perks are small, and they arrive as the tide speeds up, so the late game stays tense but feels earned. The day cycle (900 丈) is tuned so that the second gate comes around dusk: the spirit koi's glow arrives with the lanterns and the stars.
+- **Evolution inside a run** answers "why keep going?" with something to see, not just a bigger number: the next form (shown as ? until first reached) is always one gate away, and the HUD counts down the 丈 to it. Gates fall at 260 丈 and then every 450 丈 (260, 710, 1,160, 1,610), so the first form comes quickly and each later one is a real journey. Once a dragon, each gate grows it (22 body segments plus 5 per gate, heavier each time, up to 8 growths), so there is still something to earn. The perks are small, and they arrive as the tide speeds up, so the late game stays tense but feels earned. The day cycle (900 丈) puts the second gate (710 丈) in the starlit night, so the spirit koi's glow arrives with the lanterns and the stars.
 
