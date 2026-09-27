@@ -360,15 +360,18 @@ class Game {
 
   // Frame pacing. The game draws every refresh while it keeps up. When it misses refreshes on a display fast enough to
   // spare them (120, 144 Hz), it draws every other one instead: a steady 60 or 72 fps paces better than a ragged 100, for
-  // less work. After a quiet spell it tries the full rate again, waiting twice as long each time that fails.
+  // less work. After a quiet spell it tries the full rate again, waiting twice as long each time that fails. It holds
+  // still while the resolution governor is trialling a step, and a change of pace restarts the governor's window, so
+  // the governor never takes a change of cadence for the effect of a change of resolution.
   pacing(ms, vsync) {
-    const p = this.pace, most = Math.max(1, Math.floor(1000 / vsync / DRAW_HZ + 0.05));
-    if (ms > 120) return;   // a stall (tab switch, alert), not a frame rate
+    const p = this.pace, most = Math.max(1, Math.floor(1000 / vsync / DRAW_HZ + 0.05)), was = p.every;
+    if (ms > 120 || this.qTrial) return;   // a stall (tab switch, alert) is not a frame rate
     p.miss += ((ms > (p.every + 0.5) * vsync ? 1 : 0) - p.miss) * 0.05;   // share of recent frames that came late
     p.calm += ms;
     if (p.every < most && p.miss > 0.15) { p.every++; p.miss = 0; p.calm = 0; p.retry = Math.min(60000, p.retry * 2); }
     else if (p.every > 1 && p.calm > p.retry) { p.every--; p.miss = 0; p.calm = 0; }
     p.every = Math.min(p.every, most);
+    if (p.every !== was) this.frameLog.length = 0;
   }
 
   // ---------- update ----------
