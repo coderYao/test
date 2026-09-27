@@ -124,9 +124,9 @@ class Game {
     }
     if (mean > 1000 / SLOW_FPS && this.q < QUALITY.length - 1) {
       // the next level that changes the canvases; if none does, there is nothing left to try
-      const now = this.res(this.q).size;
+      const size = this.res(this.q).size;
       let q = this.q + 1;
-      while (q < QUALITY.length && this.res(q).size === now) q++;
+      while (q < QUALITY.length && this.res(q).size === size) q++;
       if (q === QUALITY.length) { this.qDone = true; return; }
       this.qTrial = { from: this.q, mean };
       this.q = q; log.length = 0; this.qCool = 2;
