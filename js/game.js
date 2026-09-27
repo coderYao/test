@@ -33,6 +33,14 @@ const HUD_INK = { x: 62, y: 58 };
 const QUALITY = [{ fg: 1, bg: 1 }, { fg: 0.8, bg: 0.85 }, { fg: 0.66, bg: 0.7 }, { fg: 0.55, bg: 0.6 }];
 // Each visit starts one step above the last saved level, so a device that was only briefly slow (thermal, power mode) recovers.
 const loadQuality = () => { try { return clamp((+localStorage.getItem('moli.quality') || 0) - 1, 0, QUALITY.length - 1); } catch (e) { return 0; } };
+// Pixel budgets for the two layers, before the quality level scales them. Played full screen on a large retina display
+// (as portals invite), the front layer alone would be 6 to 15 million pixels a frame; past these, sharpness gives way first.
+const FG_PIXELS = 4.2e6, BG_PIXELS = 2.2e6;
+// Frame pacing (see pacing()): the game draws every refresh while it keeps up. On a display fast enough to spare some
+// (120, 144 Hz), a game that misses refreshes draws every n-th instead, but never by choice below about DRAW_HZ fps.
+const DRAW_HZ = 60;
+// the frame-rate governor steps resolution down while play is slower than this
+const SLOW_FPS = 54;
 
 class Game {
   constructor(canvas) {
@@ -45,6 +53,9 @@ class Game {
     this.scenery = new Scenery(this.seed);
     this.state = 'title';
     this.time = 0; this.last = performance.now();
+    // recent intervals between frame callbacks, and a scratch copy for sorting them
+    this.rafT = 0; this.gaps = new Float64Array(30).fill(1000 / 60); this.gapSort = new Float64Array(30); this.gapI = 0;
+    this.pace = { every: 1, miss: 0, calm: 0, retry: 4000 };   // draw every n-th refresh; see pacing()
     this.pointer = { x: 0, y: 0, down: false, type: 'mouse', sx: 0, sy: 0, ts: 0, inside: false };
     this.tip = { x: 0, y: 0 }; this.pSpeed = 0;
     this.waterHold = false; this.waterToggle = false;
@@ -69,11 +80,19 @@ class Game {
     requestAnimationFrame(t => this.loop(t));
   }
 
-  resize() {
-    const Q = QUALITY[this.q], dev = window.devicePixelRatio || 1;
-    const dpr = Math.max(0.75, Math.min(2, dev) * Q.fg), bdpr = Math.max(0.5, Math.min(1, dev) * Q.bg);
+  // the layout, and each canvas's device pixels per CSS pixel, at quality level q: the device's, within the pixel budgets,
+  // scaled by the level, and never below a floor (so where the budgets and floors bind, neighbouring levels coincide)
+  res(q) {
+    const Q = QUALITY[q], dev = window.devicePixelRatio || 1;
     // a hidden or zero-size frame reports 0x0; lay out for a nominal size until a real resize arrives
     const W = window.innerWidth || 1280, H = window.innerHeight || 720;
+    const fit = pixels => Math.sqrt(pixels / (W * H));
+    const dpr = Math.max(0.75, Math.min(2, dev, fit(FG_PIXELS)) * Q.fg), bdpr = Math.max(0.5, Math.min(1, dev, fit(BG_PIXELS)) * Q.bg);
+    return { W, H, dpr, bdpr, size: [W * dpr, H * dpr, W * bdpr, H * bdpr].map(Math.round).join() };
+  }
+
+  resize() {
+    const { W, H, dpr, bdpr } = this.res(this.q);
     this.canvas.width = Math.round(W * dpr); this.canvas.height = Math.round(H * dpr);
     this.canvas.style.width = W + 'px'; this.canvas.style.height = H + 'px';
     this.bgCanvas.width = Math.round(W * bdpr); this.bgCanvas.height = Math.round(H * bdpr);
@@ -81,12 +100,13 @@ class Game {
     this.scale = H / LH; this.LW = W / this.scale; this.dpr = dpr;
     this.ctx.setTransform(dpr * this.scale, 0, 0, dpr * this.scale, 0, 0);
     this.bctx.setTransform(bdpr * this.scale, 0, 0, bdpr * this.scale, 0, 0);
+    this.scenery.setRes(bdpr * this.scale);
     Stroke.RES = Math.min(3, dpr * this.scale);
     if (this.field) this.field.resize(Math.ceil((this.LW + 600) / CELL));
     if (this.scenery.paper) this.scenery.paperPattern = this.bctx.createPattern(this.scenery.paper, 'repeat');
   }
 
-  // Frame-rate governor. If play sits below ~48 fps for a couple of seconds, it tries one resolution step down. A slow
+  // Frame-rate governor. If play sits below SLOW_FPS for a couple of seconds, it tries one resolution step down. A slow
   // frame rate is not always load: a 30 Hz power mode or a throttled frame looks the same. So the step is a trial: it is
   // kept (and saved for this device) only if the next window is clearly faster, otherwise it is undone and the governor
   // stands down for the session. Only gameplay frames count; menus with blurred overlays would mislead it.
@@ -102,9 +122,14 @@ class Game {
       if (mean > t.mean * 0.9) { this.q = t.from; this.qDone = true; this.resize(); return; }
       try { localStorage.setItem('moli.quality', String(this.q)); } catch (e) { /* private mode */ }
     }
-    if (mean > 1000 / 48 && this.q < QUALITY.length - 1) {
+    if (mean > 1000 / SLOW_FPS && this.q < QUALITY.length - 1) {
+      // the next level that changes the canvases; if none does, there is nothing left to try
+      const size = this.res(this.q).size;
+      let q = this.q + 1;
+      while (q < QUALITY.length && this.res(q).size === size) q++;
+      if (q === QUALITY.length) { this.qDone = true; return; }
       this.qTrial = { from: this.q, mean };
-      this.q++; log.length = 0; this.qCool = 2;
+      this.q = q; log.length = 0; this.qCool = 2;
       this.resize();
     }
   }
@@ -224,7 +249,7 @@ class Game {
       if (e.key === 'Enter' || e.key === 'r' || e.key === 'R') { if (this.state === 'over' || this.state === 'title') this.start(); }
     });
     window.addEventListener('keyup', e => { if (e.key === 'Shift' || e.key === ' ') this.waterHold = false; });
-    document.getElementById('btn-again').addEventListener('click', () => this.start());
+    document.getElementById('btn-again').addEventListener('click', () => { if (this.state === 'over') this.start(); });
     document.getElementById('btn-title').addEventListener('click', () => this.toTitle());
     document.getElementById('btn-water').addEventListener('click', e => { this.waterToggle = !this.waterToggle; e.currentTarget.classList.toggle('on', this.waterToggle); if (this.cur) this.endStroke(); });
     document.getElementById('btn-mute').addEventListener('click', () => this.toggleMute());
@@ -333,9 +358,34 @@ class Game {
 
   award(pts, flat) { const v = flat ? pts : pts * this.mult; this.points += v; if (v >= 10) this.scorePop = 0.3; return Math.round(v); }
 
+  // Frame pacing. The game draws every refresh while it keeps up. When it misses refreshes on a display fast enough to
+  // spare them (120, 144 Hz), it draws every other one instead: a steady 60 or 72 fps paces better than a ragged 100, for
+  // less work. After a quiet spell it tries the full rate again, waiting twice as long each time that fails. It holds
+  // still while the resolution governor is trialling a step, and a change of pace restarts the governor's window, so
+  // the governor never takes a change of cadence for the effect of a change of resolution.
+  pacing(ms, vsync) {
+    const p = this.pace, most = Math.max(1, Math.floor(1000 / vsync / DRAW_HZ + 0.05)), was = p.every;
+    if (ms > 120 || this.qTrial) return;   // a stall (tab switch, alert) is not a frame rate
+    p.miss += ((ms > (p.every + 0.5) * vsync ? 1 : 0) - p.miss) * 0.05;   // share of recent frames that came late
+    p.calm += ms;
+    if (p.every < most && p.miss > 0.15) { p.every++; p.miss = 0; p.calm = 0; p.retry = Math.min(60000, p.retry * 2); }
+    else if (p.every > 1 && p.calm > p.retry) { p.every--; p.miss = 0; p.calm = 0; }
+    p.every = Math.min(p.every, most);
+    if (p.every !== was) this.frameLog.length = 0;
+  }
+
   // ---------- update ----------
   loop(now) {
     requestAnimationFrame(t => this.loop(t));
+    // the refresh interval: the lower quartile of recent gaps between callbacks. A late frame only makes a gap longer,
+    // so this holds while most frames are late, and a clock that jitters or rounds to the millisecond (as some browsers'
+    // do) only nudges it, which pacing() tolerates: it bounds how far pacing may step down, never forces it.
+    const gap = now - this.rafT; this.rafT = now;
+    if (gap > 1) this.gaps[this.gapI++ % this.gaps.length] = gap;
+    const sorted = this.gapSort; sorted.set(this.gaps); sorted.sort();
+    const vsync = sorted[sorted.length >> 2];
+    if (now - this.last < (this.pace.every - 0.5) * vsync) return;
+    this.pacing(now - this.last, vsync);
     let dt = (now - this.last) / 1000; this.last = now;
     this.watchFrames(dt * 1000);
     if (dt > 0.05) dt = 0.05;
