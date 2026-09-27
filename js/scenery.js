@@ -23,13 +23,21 @@ const DAY_KEYS = [
   [1.00, [255, 196, 170], 0.32],
 ];
 
+// Slack, in logical px, a cached mountain layer keeps beyond the screen's right edge before it has to slide
+const STRIP_SLACK = 320;
+
 class Scenery {
   constructor(seed) {
     this.seed = seed;
     this.paper = null;
     this.paperPattern = null;
     this.decoCache = new Map();
+    this.k = 1;          // device pixels per logical pixel of the canvas the background is painted on
+    this.strips = [];    // the mountain layers, cached (see layerStrip)
   }
+
+  // the background canvas changed resolution: the cached layers are repainted at the new one
+  setRes(k) { this.k = k; this.strips = []; }
 
   makePaper(ctx) {
     const s = 512;
@@ -99,8 +107,13 @@ class Scenery {
     const p = this.dl.p;
     if (p < 0.63) this.drawSun(ctx, W, H, p / 0.63);
     if (p > 0.57 && p < 0.99) this.drawMoon(ctx, W, H, (p - 0.57) / 0.42);
-    // mountain layers back to front
-    for (let L = 0; L < LAYERS.length; L++) this.drawLayer(ctx, L, camX, W, H, time);
+    // mountain layers back to front: the still parts from their cached strips, then what moves
+    const season = this.seasonIndex(camX + W * 0.5), k = this.k;
+    for (let L = 0; L < LAYERS.length; L++) {
+      const ox = camX * LAYERS[L].par, s = this.layerStrip(L, ox, W, H, season);
+      ctx.drawImage(s.cv, s.px0 / k - ox, s.top, s.cv.width / k, s.cv.height / k);
+      this.drawLiveDecorations(ctx, L, ox, W, season, time);
+    }
     // deep ink pool at the bottom
     const pg = ctx.createLinearGradient(0, H - 90, 0, H);
     pg.addColorStop(0, 'rgba(24,26,34,0)'); pg.addColorStop(0.55, 'rgba(24,26,34,0.55)'); pg.addColorStop(1, 'rgba(18,20,28,0.95)');
@@ -274,54 +287,111 @@ class Scenery {
     ctx.restore();
   }
 
-  drawLayer(ctx, L, camX, W, H, time) {
-    const p = LAYERS[L];
-    const ox = camX * p.par;
-    const step = 6;
-    const seasonIdx = this.seasonIndex(camX + W * 0.5);
+  // A mountain layer takes a thousand-odd path operations to paint, and repainting all three every frame was most of a
+  // frame's cost. So each layer's still parts are painted once into a strip a little wider than the screen, in the
+  // layer's own coordinates, and the strip is drawn at the layer's parallax offset. When the scroll nears the strip's
+  // right edge, the strip slides its pixels left by a whole number of device pixels and paints only the columns that
+  // came into view: the same shapes land on the same pixel grid, so the seam is invisible. A new season repaints it.
+  layerStrip(L, ox, W, H, season) {
+    const k = this.k, top = LAYERS[L].base - LAYERS[L].amp - LAYERS[L].sky;
+    const pw = Math.ceil((W + 24 + STRIP_SLACK) * k), ph = Math.ceil((H + 10 - top) * k);
+    let s = this.strips[L];
+    if (!s || s.cv.width !== pw || s.cv.height !== ph) {
+      const cv = document.createElement('canvas'); cv.width = pw; cv.height = ph;
+      s = this.strips[L] = { cv, c: cv.getContext('2d'), top, px0: 0, season: -1 };
+    }
+    // px0: the device column, in layer coordinates times k, of the strip's left edge (an integer, so slides stay on the grid)
+    const want = Math.floor((ox - 12) * k), shift = want - s.px0;
+    if (s.season !== season || shift < 0 || shift >= pw) {
+      s.px0 = want; s.season = season;
+      this.paintStrip(s, L, 0, pw, H);
+    } else if ((ox + W + 12) * k > s.px0 + pw) {
+      const c = s.c;
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalCompositeOperation = 'copy';
+      c.drawImage(s.cv, shift, 0, pw - shift, ph, 0, 0, pw - shift, ph);
+      c.globalCompositeOperation = 'source-over';
+      s.px0 = want;
+      this.paintStrip(s, L, pw - shift, pw, H);
+    }
+    return s;
+  }
+
+  // paint device columns c0..c1 of a strip
+  paintStrip(s, L, c0, c1, H) {
+    const c = s.c, k = this.k, ph = s.cv.height;
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(c0, 0, c1 - c0, ph);
+    c.beginPath(); c.rect(c0, 0, c1 - c0, ph); c.clip();
+    c.setTransform(k, 0, 0, k, -s.px0, -s.top * k);
+    this.paintLayer(c, L, (s.px0 + c0) / k, (s.px0 + c1) / k, H, s.season);
+    c.restore();
+  }
+
+  // the still parts of a layer, in layer coordinates, over x in [a, b] (the caller clips to it): the washes, the ridge
+  // line, winter snow, the mist and the trees and buildings. Everything is sampled on a fixed grid in layer space, so
+  // painting a layer in several pieces gives exactly the shapes painting it whole would.
+  paintLayer(ctx, L, a, b, H, season) {
+    const p = LAYERS[L], step = 6;
+    const x0 = Math.floor(a / step) * step - step * 2, x1 = b + step * 2;
+    const ys = [];
+    for (let x = x0; x <= x1; x += step) ys.push(this.ridge(L, x));
     // three offset washes give the layered "wet wash" look
     for (let pass = 0; pass < 3; pass++) {
       const dy = pass * p.amp * 0.06;
       const alpha = pass === 0 ? p.alpha * 0.55 : pass === 1 ? p.alpha * 0.5 : p.alpha * 0.35;
       ctx.fillStyle = `rgba(${p.col},${alpha})`;
-      ctx.beginPath(); ctx.moveTo(-10, H + 10);
-      for (let x = -10; x <= W + 10; x += step) {
-        const y = this.ridge(L, x + ox) + dy + (pass ? (vnoise((x + ox) * 0.05, pass * 9, 77) - 0.5) * 6 : 0);
-        ctx.lineTo(x, y);
-      }
-      ctx.lineTo(W + 10, H + 10); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x0, H + 10);
+      for (let i = 0, x = x0; x <= x1; i++, x += step) ctx.lineTo(x, ys[i] + dy + (pass ? (vnoise(x * 0.05, pass * 9, 77) - 0.5) * 6 : 0));
+      ctx.lineTo(x1, H + 10); ctx.closePath(); ctx.fill();
     }
     // ridge line: a broken, pressure-varied brush line
     ctx.lineCap = 'round';
-    let prev = null;
-    for (let x = -10; x <= W + 10; x += step) {
-      const wx = x + ox;
-      const y = this.ridge(L, wx);
-      if (prev) {
-        const n = vnoise(wx * 0.03, L * 5, 91);
-        if (n > 0.25) {
-          ctx.strokeStyle = `rgba(28,30,40,${p.line * (0.5 + n * 0.5)})`;
-          ctx.lineWidth = 0.6 + n * 2.2 * p.lineW;
-          ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(x, y); ctx.stroke();
-        }
-      }
-      prev = { x, y };
+    for (let i = 1, x = x0 + step; x <= x1; i++, x += step) {
+      const n = vnoise(x * 0.03, L * 5, 91);
+      if (n <= 0.25) continue;
+      ctx.strokeStyle = `rgba(28,30,40,${p.line * (0.5 + n * 0.5)})`;
+      ctx.lineWidth = 0.6 + n * 2.2 * p.lineW;
+      ctx.beginPath(); ctx.moveTo(x - step, ys[i - 1]); ctx.lineTo(x, ys[i]); ctx.stroke();
     }
     // snow on the ridge in winter
-    if (seasonIdx === 3 && L >= 1) {
+    if (season === 3 && L >= 1) {
       ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2.2;
-      for (let x = -10; x <= W + 10; x += step * 2) {
-        const wx = x + ox; if (vnoise(wx * 0.04, 5, 33) < 0.45) continue;
-        const y = this.ridge(L, wx);
-        ctx.beginPath(); ctx.moveTo(x, y - 1); ctx.lineTo(x + step * 2, this.ridge(L, wx + step * 2) - 1); ctx.stroke();
+      for (let x = Math.floor(x0 / (step * 2)) * step * 2; x <= x1; x += step * 2) {
+        if (vnoise(x * 0.04, 5, 33) < 0.45) continue;
+        ctx.beginPath(); ctx.moveTo(x, this.ridge(L, x) - 1); ctx.lineTo(x + step * 2, this.ridge(L, x + step * 2) - 1); ctx.stroke();
       }
     }
     // mist below the ridge
     const mg = ctx.createLinearGradient(0, p.base - p.amp * 0.15, 0, p.base + 90);
     mg.addColorStop(0, 'rgba(241,234,219,0)'); mg.addColorStop(0.5, `rgba(241,234,219,${p.mist})`); mg.addColorStop(1, 'rgba(241,234,219,0)');
-    ctx.fillStyle = mg; ctx.fillRect(0, p.base - p.amp * 0.15, W, p.amp * 0.15 + 90);
-    // decorations
-    this.drawDecorations(ctx, L, ox, W, seasonIdx, time);
+    ctx.fillStyle = mg; ctx.fillRect(x0, p.base - p.amp * 0.15, x1 - x0, p.amp * 0.15 + 90);
+    // trees and buildings
+    const a1 = p.alpha * 1.6;
+    this.eachDecoration(L, x0 - 150, x1 + 150, d => {
+      const gy = this.ridge(L, d.x);
+      switch (d.t) {
+        case 'pine': this.pine(ctx, d.x, gy, d.s * (L === 2 ? 1 : 0.6), a1, d.k, season); break;
+        case 'plum': this.plum(ctx, d.x, gy, d.s, a1, d.k, season); break;
+        case 'pagoda': this.pagoda(ctx, d.x, gy, d.s, a1); break;
+        case 'hut': this.hut(ctx, d.x, gy, d.s, a1); break;
+      }
+    });
+  }
+
+  // what moves is drawn every frame, over the layer's strip: bamboo in the wind, birds, and lamps lit at night
+  drawLiveDecorations(ctx, L, ox, W, season, time) {
+    const a = LAYERS[L].alpha * 1.6;
+    this.eachDecoration(L, ox - 150, ox + W + 150, d => {
+      const sx = d.x - ox;
+      switch (d.t) {
+        case 'bamboo': this.bamboo(ctx, sx, this.ridge(L, d.x), d, a, time, season); break;
+        case 'birds': this.birds(ctx, sx, d.y, d.n, d.s, a, time); break;
+        case 'pagoda': this.glowAt(ctx, sx, this.ridge(L, d.x) - 30 * d.s, 12 * d.s); break;
+        case 'hut': this.glowAt(ctx, sx, this.ridge(L, d.x) - 8 * d.s, 16 * d.s); break;
+      }
+    });
   }
 
   chunkDeco(L, ci) {
@@ -356,26 +426,12 @@ class Scenery {
     return d;
   }
 
-  drawDecorations(ctx, L, ox, W, seasonIdx, time) {
+  // every decoration of a layer standing between layer x0 and x1
+  eachDecoration(L, x0, x1, fn) {
     if (L === 0) return;
     const CH = 700;
-    const c0 = Math.floor((ox - 200) / CH), c1 = Math.floor((ox + W + 200) / CH);
-    const p = LAYERS[L];
-    for (let ci = c0; ci <= c1; ci++) {
-      for (const d of this.chunkDeco(L, ci)) {
-        const sx = d.x - ox;
-        if (sx < -150 || sx > W + 150) continue;
-        const gy = this.ridge(L, d.x);
-        const a = p.alpha * 1.6;
-        switch (d.t) {
-          case 'pine': this.pine(ctx, sx, gy, d.s * (L === 2 ? 1 : 0.6), a, d.k, seasonIdx); break;
-          case 'bamboo': this.bamboo(ctx, sx, gy, d, a, time, seasonIdx); break;
-          case 'plum': this.plum(ctx, sx, gy, d.s, a, d.k, seasonIdx); break;
-          case 'pagoda': this.pagoda(ctx, sx, gy, d.s, a); this.glowAt(ctx, sx, gy - 30 * d.s, 12 * d.s); break;
-          case 'hut': this.hut(ctx, sx, gy, d.s, a); this.glowAt(ctx, sx, gy - 8 * d.s, 16 * d.s); break;
-          case 'birds': this.birds(ctx, sx, d.y, d.n, d.s, a, time); break;
-        }
-      }
+    for (let ci = Math.floor(x0 / CH); ci <= Math.floor(x1 / CH); ci++) {
+      for (const d of this.chunkDeco(L, ci)) if (d.x >= x0 && d.x <= x1) fn(d);
     }
   }
 
@@ -495,9 +551,10 @@ class Scenery {
   }
 }
 
-// parallax layers, back to front
+// parallax layers, back to front. sky: headroom above the highest possible ridge for what stands on it
+// (a pagoda's spire on the middle layer, a plum tree's crown on the near one), so the cached strip can start there.
 const LAYERS = [
-  { par: 0.08, base: 470, amp: 260, freq: 0.0011, alpha: 0.13, col: '70,76,92', line: 0.10, lineW: 0.5, mist: 0.55 },
-  { par: 0.2, base: 560, amp: 210, freq: 0.0016, alpha: 0.22, col: '52,58,74', line: 0.22, lineW: 0.8, mist: 0.5 },
-  { par: 0.42, base: 660, amp: 140, freq: 0.0024, alpha: 0.30, col: '36,40,54', line: 0.38, lineW: 1.0, mist: 0.35 },
+  { par: 0.08, base: 470, amp: 260, freq: 0.0011, alpha: 0.13, col: '70,76,92', line: 0.10, lineW: 0.5, mist: 0.55, sky: 12 },
+  { par: 0.2, base: 560, amp: 210, freq: 0.0016, alpha: 0.22, col: '52,58,74', line: 0.22, lineW: 0.8, mist: 0.5, sky: 100 },
+  { par: 0.42, base: 660, amp: 140, freq: 0.0024, alpha: 0.30, col: '36,40,54', line: 0.38, lineW: 1.0, mist: 0.35, sky: 180 },
 ];

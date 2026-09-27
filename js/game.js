@@ -33,6 +33,14 @@ const HUD_INK = { x: 62, y: 58 };
 const QUALITY = [{ fg: 1, bg: 1 }, { fg: 0.8, bg: 0.85 }, { fg: 0.66, bg: 0.7 }, { fg: 0.55, bg: 0.6 }];
 // Each visit starts one step above the last saved level, so a device that was only briefly slow (thermal, power mode) recovers.
 const loadQuality = () => { try { return clamp((+localStorage.getItem('moli.quality') || 0) - 1, 0, QUALITY.length - 1); } catch (e) { return 0; } };
+// Pixel budgets for the two layers, before the quality level scales them. Played full screen on a large retina display
+// (as portals invite), the front layer alone would be 6 to 15 million pixels a frame; past these, sharpness gives way first.
+const FG_PIXELS = 4.2e6, BG_PIXELS = 2.2e6;
+// On a 120 or 144 Hz display the game draws every other refresh. A steady 60 or 72 fps paces better than a ragged 100,
+// for half the work, and a scroll of ink gains nothing from more. Refresh rates up to ~105 Hz draw every frame.
+const MIN_FRAME_MS = 9.5;
+// the frame-rate governor steps resolution down while play is slower than this
+const SLOW_FPS = 54;
 
 class Game {
   constructor(canvas) {
@@ -71,9 +79,10 @@ class Game {
 
   resize() {
     const Q = QUALITY[this.q], dev = window.devicePixelRatio || 1;
-    const dpr = Math.max(0.75, Math.min(2, dev) * Q.fg), bdpr = Math.max(0.5, Math.min(1, dev) * Q.bg);
     // a hidden or zero-size frame reports 0x0; lay out for a nominal size until a real resize arrives
     const W = window.innerWidth || 1280, H = window.innerHeight || 720;
+    const fit = pixels => Math.sqrt(pixels / (W * H));
+    const dpr = Math.max(0.75, Math.min(2, dev, fit(FG_PIXELS)) * Q.fg), bdpr = Math.max(0.5, Math.min(1, dev, fit(BG_PIXELS)) * Q.bg);
     this.canvas.width = Math.round(W * dpr); this.canvas.height = Math.round(H * dpr);
     this.canvas.style.width = W + 'px'; this.canvas.style.height = H + 'px';
     this.bgCanvas.width = Math.round(W * bdpr); this.bgCanvas.height = Math.round(H * bdpr);
@@ -81,12 +90,13 @@ class Game {
     this.scale = H / LH; this.LW = W / this.scale; this.dpr = dpr;
     this.ctx.setTransform(dpr * this.scale, 0, 0, dpr * this.scale, 0, 0);
     this.bctx.setTransform(bdpr * this.scale, 0, 0, bdpr * this.scale, 0, 0);
+    this.scenery.setRes(bdpr * this.scale);
     Stroke.RES = Math.min(3, dpr * this.scale);
     if (this.field) this.field.resize(Math.ceil((this.LW + 600) / CELL));
     if (this.scenery.paper) this.scenery.paperPattern = this.bctx.createPattern(this.scenery.paper, 'repeat');
   }
 
-  // Frame-rate governor. If play sits below ~48 fps for a couple of seconds, it tries one resolution step down. A slow
+  // Frame-rate governor. If play sits below SLOW_FPS for a couple of seconds, it tries one resolution step down. A slow
   // frame rate is not always load: a 30 Hz power mode or a throttled frame looks the same. So the step is a trial: it is
   // kept (and saved for this device) only if the next window is clearly faster, otherwise it is undone and the governor
   // stands down for the session. Only gameplay frames count; menus with blurred overlays would mislead it.
@@ -102,7 +112,7 @@ class Game {
       if (mean > t.mean * 0.9) { this.q = t.from; this.qDone = true; this.resize(); return; }
       try { localStorage.setItem('moli.quality', String(this.q)); } catch (e) { /* private mode */ }
     }
-    if (mean > 1000 / 48 && this.q < QUALITY.length - 1) {
+    if (mean > 1000 / SLOW_FPS && this.q < QUALITY.length - 1) {
       this.qTrial = { from: this.q, mean };
       this.q++; log.length = 0; this.qCool = 2;
       this.resize();
@@ -224,7 +234,7 @@ class Game {
       if (e.key === 'Enter' || e.key === 'r' || e.key === 'R') { if (this.state === 'over' || this.state === 'title') this.start(); }
     });
     window.addEventListener('keyup', e => { if (e.key === 'Shift' || e.key === ' ') this.waterHold = false; });
-    document.getElementById('btn-again').addEventListener('click', () => this.start());
+    document.getElementById('btn-again').addEventListener('click', () => { if (this.state === 'over') this.start(); });
     document.getElementById('btn-title').addEventListener('click', () => this.toTitle());
     document.getElementById('btn-water').addEventListener('click', e => { this.waterToggle = !this.waterToggle; e.currentTarget.classList.toggle('on', this.waterToggle); if (this.cur) this.endStroke(); });
     document.getElementById('btn-mute').addEventListener('click', () => this.toggleMute());
@@ -336,6 +346,7 @@ class Game {
   // ---------- update ----------
   loop(now) {
     requestAnimationFrame(t => this.loop(t));
+    if (now - this.last < MIN_FRAME_MS) return;
     let dt = (now - this.last) / 1000; this.last = now;
     this.watchFrames(dt * 1000);
     if (dt > 0.05) dt = 0.05;

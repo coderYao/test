@@ -3,8 +3,12 @@ body { font-family: "Noto Serif SC", "Songti SC", "SimSun", serif; color: #1e1e2
 #bg { display: block; position: fixed; inset: 0; pointer-events: none; }
 #game { display: block; position: fixed; inset: 0; cursor: none; touch-action: none; -webkit-user-select: none; user-select: none; }
 
-.overlay { pointer-events: none; position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(236,228,210,0.55); backdrop-filter: blur(1px); transition: opacity .5s; z-index: 5; }
-.overlay.hidden { opacity: 0; pointer-events: none; }
+.overlay { pointer-events: none; position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(236,228,210,0.55); backdrop-filter: blur(1px); transition: opacity .5s, visibility 0s; z-index: 5; }
+/* A hidden overlay fades out, then leaves rendering and hit testing. Merely transparent, its buttons still caught the
+   presses meant to paint (one on the invisible Swim again restarted the run), and its full-screen backdrop blur stayed
+   layered over the game. */
+.overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .5s, visibility 0s .5s; }
+.overlay.hidden button, .overlay.hidden .koi-card { pointer-events: none; }
 .panel { position: relative; max-width: 620px; padding: 32px 44px; background: rgba(241,234,219,0.85); border: 1px solid rgba(30,30,40,0.18); box-shadow: 0 10px 40px rgba(30,30,40,0.15), inset 0 0 60px rgba(120,100,70,0.08); text-align: center; pointer-events: none; }
 h1 { font-family: "Ma Shan Zheng", "KaiTi", "STKaiti", serif; font-weight: 400; font-size: 84px; margin: 0; letter-spacing: 0.15em; line-height: 1; }
 h1.small { font-size: 52px; }
